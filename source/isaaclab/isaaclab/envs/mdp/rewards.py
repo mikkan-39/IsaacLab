@@ -307,3 +307,68 @@ def track_ang_vel_z_exp(
     # compute the error
     ang_vel_error = torch.square(env.command_manager.get_command(command_name)[:, 2] - asset.data.root_ang_vel_b[:, 2])
     return torch.exp(-ang_vel_error / std**2)
+
+def alternating_feet(
+    env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, threshold: float = 0.1
+) -> torch.Tensor:
+    """
+    Reward alternating foot contact:
+    - Reward when one foot is in contact while the other is not.
+    - Penalize double support (both feet in contact).
+    - Penalize flight phase (both feet off the ground).
+    """
+    # Extract the used quantities (to enable type-hinting)
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+
+    # Get the net contact forces for the feet (accessing the contact sensor data)
+    net_contact_forces = contact_sensor.data.net_forces_w_history
+
+    # Check if the feet are in contact: True if the norm of contact force > threshold (indicating contact)
+    left_contact = torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids[0]], dim=-1) > threshold
+    right_contact = torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids[1]], dim=-1) > threshold
+
+    # Debugging the contact states
+    # print(f"Left contact shape: {left_contact.shape}, Right contact shape: {right_contact.shape}")
+
+    # Ensure both tensors have the same shape before calculating reward
+    if left_contact.shape != right_contact.shape:
+        raise ValueError(f"Shape mismatch between left_contact ({left_contact.shape}) and right_contact ({right_contact.shape})")
+
+    # Reward when one foot is in contact while the other is not (alternating)
+    reward = torch.where(left_contact ^ right_contact, 1.0,  # Alternating steps
+             torch.where(left_contact & right_contact, -0.5,  # Both feet touching
+             -0.2))  # Both feet in air
+
+    # Return the sum of rewards for each environment
+    return torch.sum(reward, dim=1)
+
+def joint_same_direction_deviation_penalty(
+    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """
+    Penalizes two joints if they deviate in the same direction.
+    The penalty is proportional to the **average deviation** of the two joints.
+    No penalty is applied if they deviate in opposite directions.
+    """
+    
+    # Extract articulation data
+    asset: Articulation = env.scene[asset_cfg.name]
+
+    # Get joint positions
+    joint_positions = asset.data.joint_pos[:, asset_cfg.joint_ids]  # Shape: (num_envs, num_joints)
+
+    # Select only the first two joints (assuming they are the relevant ones)
+    joint_1, joint_2 = joint_positions[:, 0], joint_positions[:, 1]
+
+    # Compute deviation from default
+    default_pos = asset.data.default_joint_pos[:, asset_cfg.joint_ids]
+    joint_1_dev = joint_1 - default_pos[:, 0]
+    joint_2_dev = joint_2 - default_pos[:, 1]
+
+    # Check if both are deviated in the same direction (same sign)
+    same_direction_mask = torch.sign(joint_1_dev) == torch.sign(joint_2_dev)
+
+    # Compute the penalty (average deviation, only applied if same direction)
+    penalty = same_direction_mask.float() * (torch.abs(joint_1_dev) + torch.abs(joint_2_dev)) / 2
+
+    return penalty

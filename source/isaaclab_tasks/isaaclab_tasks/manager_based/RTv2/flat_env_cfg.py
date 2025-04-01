@@ -19,9 +19,9 @@ class RTv2FlatEnvCfg(RTv2RoughEnvCfg):
         self.scene.terrain.terrain_type = "plane"
         self.scene.terrain.terrain_generator = None
         # no height scan
-        # self.observations.policy.height_scan = None
+        # self.observations.policy.height_scan = None # type: ignore
         # no terrain curriculum
-        self.curriculum.terrain_levels = None
+        self.curriculum.terrain_levels = None # type: ignore
 
         # Rewards
         self.rewards.track_ang_vel_z_exp.weight = 1.0
@@ -37,8 +37,8 @@ class RTv2FlatEnvCfg(RTv2RoughEnvCfg):
         )
         # Commands
         self.commands.base_velocity.ranges.lin_vel_x = (0.0, 0.0)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.0)
-        self.commands.base_velocity.ranges.ang_vel_z = (-0.3, 0.3)
+        self.commands.base_velocity.ranges.lin_vel_y = (-1.0, -1.0)
+        self.commands.base_velocity.ranges.ang_vel_z = (-1.0, 1.0)
 
 
 class RTv2FlatEnvCfg_PLAY(RTv2FlatEnvCfg):
@@ -52,5 +52,5 @@ class RTv2FlatEnvCfg_PLAY(RTv2FlatEnvCfg):
         # disable randomization for play
         self.observations.policy.enable_corruption = False
         # remove random pushing
-        self.events.base_external_force_torque = None
-        self.events.push_robot = None
+        self.events.base_external_force_torque = None # type: ignore
+        self.events.push_robot = None # type: ignore
