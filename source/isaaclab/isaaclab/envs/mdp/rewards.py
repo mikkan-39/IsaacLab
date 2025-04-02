@@ -372,3 +372,34 @@ def joint_same_direction_deviation_penalty(
     penalty = same_direction_mask.float() * (torch.abs(joint_1_dev) + torch.abs(joint_2_dev)) / 2
 
     return penalty
+
+def joint_diff_direction_deviation_penalty(
+    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """
+    Penalizes two joints if they deviate in the same direction.
+    The penalty is proportional to the **average deviation** of the two joints.
+    No penalty is applied if they deviate in opposite directions.
+    """
+    
+    # Extract articulation data
+    asset: Articulation = env.scene[asset_cfg.name]
+
+    # Get joint positions
+    joint_positions = asset.data.joint_pos[:, asset_cfg.joint_ids]  # Shape: (num_envs, num_joints)
+
+    # Select only the first two joints (assuming they are the relevant ones)
+    joint_1, joint_2 = joint_positions[:, 0], joint_positions[:, 1]
+
+    # Compute deviation from default
+    default_pos = asset.data.default_joint_pos[:, asset_cfg.joint_ids]
+    joint_1_dev = joint_1 - default_pos[:, 0]
+    joint_2_dev = joint_2 - default_pos[:, 1]
+
+    # Check if both are deviated in the same direction (same sign)
+    same_direction_mask = torch.sign(joint_1_dev) != torch.sign(joint_2_dev)
+
+    # Compute the penalty (average deviation, only applied if same direction)
+    penalty = same_direction_mask.float() * (torch.abs(joint_1_dev) + torch.abs(joint_2_dev)) / 2
+
+    return penalty

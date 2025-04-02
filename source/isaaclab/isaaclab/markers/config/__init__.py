@@ -79,7 +79,7 @@ BLUE_ARROW_X_MARKER_CFG = VisualizationMarkersCfg(
     markers={
         "arrow": sim_utils.UsdFileCfg(
             usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/UIElements/arrow_x.usd",
-            scale=(1.0, 0.1, 0.1),
+            scale=(0.2, 0.02, 0.02),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 0.0, 1.0)),
         )
     }
@@ -90,7 +90,7 @@ GREEN_ARROW_X_MARKER_CFG = VisualizationMarkersCfg(
     markers={
         "arrow": sim_utils.UsdFileCfg(
             usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/UIElements/arrow_x.usd",
-            scale=(1.0, 0.1, 0.1),
+            scale=(0.2, 0.02, 0.02),
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)),
         )
     }
