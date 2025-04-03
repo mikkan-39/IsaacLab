@@ -267,6 +267,27 @@ def undesired_contacts(env: ManagerBasedRLEnv, threshold: float, sensor_cfg: Sce
     # sum over contacts for each environment
     return torch.sum(is_contact, dim=1)
 
+def undesired_contacts_all(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
+    """Penalize undesired contacts based on the average contact time, but only if all contacts are present."""
+    # Extract contact sensor
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+
+    # Get contact times for the specified body parts
+    contact_time = contact_sensor.data.current_contact_time[:, sensor_cfg.body_ids]
+
+    # Determine if each contact point is currently in contact
+    in_contact = contact_time > 0.0
+
+    # Check if all contacts are present (i.e., every contact point is active)
+    all_contacts_present = torch.all(in_contact, dim=1)
+
+    # Compute the average contact time across all contacts
+    avg_contact_time = torch.mean(contact_time, dim=1)
+
+    # Apply penalty only if all contacts are present
+    penalty = avg_contact_time * all_contacts_present.float()
+
+    return penalty
 
 def contact_forces(env: ManagerBasedRLEnv, threshold: float, sensor_cfg: SceneEntityCfg) -> torch.Tensor:
     """Penalize contact forces as the amount of violations of the net contact force."""
@@ -377,7 +398,7 @@ def joint_diff_direction_deviation_penalty(
     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
     """
-    Penalizes two joints if they deviate in the same direction.
+    Penalizes two joints if they deviate in diffeerent direction.
     The penalty is proportional to the **average deviation** of the two joints.
     No penalty is applied if they deviate in opposite directions.
     """
@@ -396,10 +417,41 @@ def joint_diff_direction_deviation_penalty(
     joint_1_dev = joint_1 - default_pos[:, 0]
     joint_2_dev = joint_2 - default_pos[:, 1]
 
-    # Check if both are deviated in the same direction (same sign)
-    same_direction_mask = torch.sign(joint_1_dev) != torch.sign(joint_2_dev)
+    
+    diff_direction_mask = torch.sign(joint_1_dev) != torch.sign(joint_2_dev)
 
-    # Compute the penalty (average deviation, only applied if same direction)
-    penalty = same_direction_mask.float() * (torch.abs(joint_1_dev) + torch.abs(joint_2_dev)) / 2
+    penalty = diff_direction_mask.float() * (torch.abs(joint_1_dev) + torch.abs(joint_2_dev)) / 2
 
+    # print(joint_1_dev)
+    # print(joint_2_dev)
+    # print(diff_direction_mask)
+    # print(penalty)
+    # print("")
     return penalty
+
+def two_joint_deviation_penalty(
+    env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    
+    # Extract articulation data
+    asset: Articulation = env.scene[asset_cfg.name]
+
+    # Get joint positions
+    joint_positions = asset.data.joint_pos[:, asset_cfg.joint_ids]  # Shape: (num_envs, num_joints)
+
+    # Select only the first two joints (assuming they are the relevant ones)
+    joint_1, joint_2 = joint_positions[:, 0], joint_positions[:, 1]
+
+    # Compute deviation from default
+    default_pos = asset.data.default_joint_pos[:, asset_cfg.joint_ids]
+    joint_1_dev = joint_1 - default_pos[:, 0]
+    joint_2_dev = joint_2 - default_pos[:, 1]
+
+    # Compute absolute deviations
+    abs_dev_1 = torch.abs(joint_1_dev)
+    abs_dev_2 = torch.abs(joint_2_dev)
+
+    # Reward is proportional to their absolute difference
+    reward = torch.abs(abs_dev_1 - abs_dev_2)
+
+    return reward

@@ -104,7 +104,7 @@ class CommandsCfg:
         heading_control_stiffness=0.5,
         debug_vis=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.1, 0.1), lin_vel_y=(-1.0, 0.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
+            lin_vel_x=(-0.0, 0.0), lin_vel_y=(-1.0, 0.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
         ),
     )
 
@@ -171,8 +171,8 @@ class EventCfg:
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
             # "static_friction_range": (0.8, 0.8),
             # "dynamic_friction_range": (0.6, 0.6),
-            "static_friction_range": (1.2, 1.2),
-            "dynamic_friction_range": (1.0, 1.0),
+            "static_friction_range": (2.2, 2.2),
+            "dynamic_friction_range": (2.0, 2.0),
             "restitution_range": (0.0, 0.0),
             "num_buckets": 64,
         },
@@ -248,13 +248,13 @@ class RewardsCfg:
     # -- penalties
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")})
     # lin_vel_feet = RewTerm(func=mdp.lin_vel_z_l2, weight=2.0, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*Foot")})
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")})
+    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.1, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")})
     dof_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
     dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
     action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
     feet_air_time = RewTerm(
         func=mdp.feet_air_time,
-        weight=0.125,
+        weight=0.525,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*Foot"),
             "command_name": "base_velocity",
@@ -325,6 +325,8 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.dt = 0.005
         self.sim.render_interval = 4
         self.sim.physics_material = self.scene.terrain.physics_material
+        self.sim.device = "cuda:0"
+        self.sim.enable_scene_query_support = False
         
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
         # update sensor update periods
