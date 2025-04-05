@@ -15,7 +15,7 @@ from isaaclab.sim import SimulationCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 
-from isaaclab_tasks.direct.locomotion.locomotion_env import LocomotionEnv
+from isaaclab_tasks.direct.RT.locomotion_env import LocomotionEnv
 
 
 @configclass
@@ -24,8 +24,8 @@ class RTEnvCfg(DirectRLEnvCfg):
     episode_length_s = 15.0
     decimation = 2
     action_scale = 1.0
-    action_space = 21
-    observation_space = 75
+    action_space = 22
+    observation_space = 78
     state_space = 0
 
     # simulation
@@ -83,7 +83,7 @@ class RTEnvCfg(DirectRLEnvCfg):
     dof_vel_scale: float = 0.1
 
     death_cost: float = -1.0
-    termination_height: float = 0.8
+    termination_height: float = 0.25
 
     angular_velocity_scale: float = 0.25
     contact_force_scale: float = 0.01

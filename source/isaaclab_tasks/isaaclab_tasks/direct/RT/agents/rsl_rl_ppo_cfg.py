@@ -14,7 +14,7 @@ class RTPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         init_noise_std=1.0,
         actor_hidden_dims=[400, 200, 100],
         critic_hidden_dims=[400, 200, 100],
-        activation="elu",
+        activation="tanh",
     )
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
