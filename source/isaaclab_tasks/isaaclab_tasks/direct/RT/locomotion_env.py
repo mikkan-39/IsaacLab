@@ -64,6 +64,7 @@ class LocomotionEnv(DirectRLEnv):
 
     def _apply_action(self):
         forces = self.action_scale * self.joint_gears * self.actions
+        # print(self._joint_dof_idx)
         self.robot.set_joint_effort_target(forces, joint_ids=self._joint_dof_idx)
 
     def _compute_intermediate_values(self):
@@ -140,6 +141,7 @@ class LocomotionEnv(DirectRLEnv):
             self.cfg.death_cost,
             self.cfg.alive_reward_scale,
             self.motor_effort_ratio,
+            self.yaw
         )
         return total_reward
 
@@ -189,6 +191,7 @@ def compute_rewards(
     death_cost: float,
     alive_reward_scale: float,
     motor_effort_ratio: torch.Tensor,
+    yaw: torch.Tensor
 ):
     heading_weight_tensor = torch.ones_like(heading_proj) * heading_weight
     heading_reward = torch.where(heading_proj > 0.8, heading_weight_tensor, heading_weight * heading_proj / 0.8)
@@ -219,6 +222,7 @@ def compute_rewards(
         - actions_cost_scale * actions_cost
         - energy_cost_scale * electricity_cost
         - dof_at_limit_cost
+        - abs(yaw) * 0.01
     )
     # adjust reward for fallen agents
     total_reward = torch.where(reset_terminated, torch.ones_like(total_reward) * death_cost, total_reward)
