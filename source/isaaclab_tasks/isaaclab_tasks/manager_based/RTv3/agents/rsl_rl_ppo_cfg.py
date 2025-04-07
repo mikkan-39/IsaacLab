@@ -9,11 +9,11 @@ class RTv3RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     max_iterations = 3000
     save_interval = 50
     experiment_name = "RTv3_rough"
-    empirical_normalization = False
+    empirical_normalization = True
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
-        actor_hidden_dims=[512, 256, 128],
-        critic_hidden_dims=[512, 256, 128],
+        actor_hidden_dims=[400, 200, 100],
+        critic_hidden_dims=[400, 200, 100],
         activation="tanh",
     )
     algorithm = RslRlPpoAlgorithmCfg(
@@ -36,8 +36,4 @@ class RTv3RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
 class RTv3FlatPPORunnerCfg(RTv3RoughPPORunnerCfg):
     def __post_init__(self):
         super().__post_init__() # type: ignore
-
-        self.max_iterations = 1500
         self.experiment_name = "RTv3_flat"
-        self.policy.actor_hidden_dims = [256, 128, 128]
-        self.policy.critic_hidden_dims = [256, 128, 128]
