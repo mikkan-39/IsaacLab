@@ -25,7 +25,7 @@ import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 ##
 from isaaclab.terrains.config.minirough import MINI_ROUGH_TERRAINS_CFG  # isort: skip
 
-controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Shoulder)).*$"
+controllableJointsRegex = "^(?!.*(Neck|to_Elbow)).*$"
 ##
 # Scene definition
 ##
@@ -40,12 +40,12 @@ class MySceneCfg(InteractiveSceneCfg):
         terrain_generator=MINI_ROUGH_TERRAINS_CFG,
         max_init_terrain_level=5,
         collision_group=-1,
-        physics_material=sim_utils.RigidBodyMaterialCfg(
-            friction_combine_mode="multiply",
-            restitution_combine_mode="multiply",
-            static_friction=1.0,
-            dynamic_friction=1.0,
-        ),
+        # physics_material=sim_utils.RigidBodyMaterialCfg(
+        #     friction_combine_mode="multiply",
+        #     restitution_combine_mode="multiply",
+        #     static_friction=1.0,
+        #     dynamic_friction=1.0,
+        # ),
         visual_material=sim_utils.MdlFileCfg(
             mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
             project_uvw=True,
@@ -85,7 +85,7 @@ class CommandsCfg:
         heading_control_stiffness=0.5,
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 1.0), lin_vel_y=(-0.15, 0.15), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
+            lin_vel_x=(0.0, 1.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
         ),
     )
 
@@ -162,7 +162,7 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-0, 0)},
+            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
             "velocity_range": {
                 "x": (-0.0, 0.0),
                 "y": (-0.0, 0.0),
@@ -172,6 +172,35 @@ class EventCfg:
                 "yaw": (-0.0, 0.0),
             },
         },
+    )
+
+    
+    add_base_mass = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
+            "mass_distribution_params": (0.75, 1.25),
+            "operation": "scale",
+        },
+    )
+
+    base_external_force_torque = EventTerm(
+        func=mdp.apply_external_force_torque,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
+            "force_range": (0.0, 0.0),
+            "torque_range": (-0.0, 0.0),
+        },
+    )
+
+    push_robot = EventTerm(
+        func=mdp.push_by_setting_velocity,
+        mode="interval",
+        interval_range_s=(3.0, 7.0),
+        params={"velocity_range": {"x": (-0.3, 0.3), "y": (-0.3, 0.3)}},
+        
     )
 
 
@@ -184,10 +213,15 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    fall = DoneTerm(
-        func=mdp.root_height_below_minimum,
+    # fall = DoneTerm(
+    #     func=mdp.root_height_below_minimum,
+    #     #45 degrees = 0.78 rad
+    #     params={"minimum_height": 0.25, "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
+    # )
+    fall_reserve = DoneTerm(
+        func=mdp.bad_orientation,
         #45 degrees = 0.78 rad
-        params={"minimum_height": 0.25, "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
+        params={"limit_angle": 1.0, "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
     )
 
 
