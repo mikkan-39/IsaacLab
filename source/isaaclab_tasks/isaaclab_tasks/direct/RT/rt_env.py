@@ -50,28 +50,28 @@ class RTEnvCfg(DirectRLEnvCfg):
     # robot
     robot: ArticulationCfg = RT_CFG.replace(prim_path="/World/envs/env_.*/Robot") # type: ignore
     joint_gears: list = [
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
-        1.0,  # 
+        -1.0, #   'base_link_to_LeftHipBracket_revolute', 
+        1.0, #   'base_link_to_Neck_revolute', 
+        1.0, #   'base_link_to_RightHipBracket_revolute', 
+        1.0, #   'base_link_to_shoulder_joint_v1Mirror_revolute', 
+        1.0, #   'base_link_to_shoulder_joint_v1_revolute', 
+        1.0, #   'LeftHipBracket_to_HipBulkL_revolute', 
+        1.0, #   'Neck_to_Head_revolute', 
+        1.0, #   'RightHipBracket_to_HipBulkR_revolute', 
+        1.0, #   'shoulder_joint_v1Mirror_to_ShoulderL_revolute', 
+        1.0, #   'shoulder_joint_v1_to_ShoulderR_revolute', 
+        -1.0, #   'HipBulkL_to_HipL_revolute', 
+        1.0, #   'HipBulkR_to_HipR_revolute', 
+        1.0, #   'ShoulderL_to_ElbowL_revolute', 
+        1.0, #   'ShoulderR_to_ElbowR_revolute', 
+        1.0, #   'HipL_to_TibiaL_revolute', 
+        -1.0, #   'HipR_to_TibiaR_revolute', 
+        1.0, #   'ElbowL_to_ArmL_revolute', 
+        1.0, #   'ElbowR_to_ArmR_revolute', 
+        1.0, #   'TibiaL_to_FootJointL_revolute', 
+        1.0, #   'TibiaR_to_FootJointR_revolute', 
+        1.0, #   'FootJointL_to_LeftFoot_revolute', 
+        1.0, #   'FootJointR_to_RightFoot_revolute'
     ]
 
     heading_weight: float = 0.5
