@@ -34,11 +34,11 @@ class RTv3Rewards:
 
     # lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
     # ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.5)
-    base_height = RewTerm(
-        func=mdp.base_height, 
-        weight=1.0, 
-        params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
-    )
+    # base_height = RewTerm(
+    #     func=mdp.base_height, 
+    #     weight=1.0, 
+    #     params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
+    # )
 
     base_pos = RewTerm(
         func=mdp.flat_orientation_l2, 
@@ -73,7 +73,7 @@ class RTv3Rewards:
     # )
     joint_deviation_hip_spread = RewTerm(
         func=mdp.joint_same_direction_deviation_penalty,
-        weight=-10.0,
+        weight=-30.0,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_to_HipBulk.*"])},
     )
     joint_deviation_hip_rotate = RewTerm(

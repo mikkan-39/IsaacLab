@@ -109,8 +109,8 @@ class ObservationsCfg:
         """Observations for policy group."""
 
         # observation terms (order preserved)
-        base_lin_vel = ObsTerm(func=mdp.base_lin_vel, noise=Unoise(n_min=-0.1, n_max=0.1))
-        base_ang_vel = ObsTerm(func=mdp.base_ang_vel, noise=Unoise(n_min=-0.2, n_max=0.2))
+        base_lin_acc = ObsTerm(func=mdp.base_lin_acc, noise=Unoise(n_min=-0.1, n_max=0.1))
+        base_ang_acc = ObsTerm(func=mdp.base_ang_acc, noise=Unoise(n_min=-0.2, n_max=0.2))
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
@@ -185,15 +185,15 @@ class EventCfg:
         },
     )
 
-    base_external_force_torque = EventTerm(
-        func=mdp.apply_external_force_torque,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
-            "force_range": (0.0, 0.0),
-            "torque_range": (-0.0, 0.0),
-        },
-    )
+    # base_external_force_torque = EventTerm(
+    #     func=mdp.apply_external_force_torque,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
+    #         "force_range": (0.0, 0.0),
+    #         "torque_range": (-0.0, 0.0),
+    #     },
+    # )
 
     push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,
@@ -201,6 +201,19 @@ class EventCfg:
         interval_range_s=(3.0, 7.0),
         params={"velocity_range": {"x": (-0.3, 0.3), "y": (-0.3, 0.3)}},
         
+    )
+
+    robot_joint_stiffness_and_damping = EventTerm(
+        func=mdp.randomize_actuator_gains,
+        min_step_count_between_reset=720,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
+            "stiffness_distribution_params": (1.0, 3.0),
+            "damping_distribution_params": (0.05, 1.0),
+            "operation": "scale",
+            "distribution": "log_uniform",
+        },
     )
 
 

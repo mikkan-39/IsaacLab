@@ -50,6 +50,20 @@ def base_ang_vel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCf
     asset: RigidObject = env.scene[asset_cfg.name]
     return asset.data.root_ang_vel_b
 
+def base_lin_acc(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Root linear velocity in the asset's root frame."""
+    # extract the used quantities (to enable type-hinting)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    return math_utils.quat_rotate_inverse(asset.data.root_quat_w, asset.data.body_lin_acc_w[:, 0, :])
+    return asset.data.body_lin_acc_w
+
+
+def base_ang_acc(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Root angular velocity in the asset's root frame."""
+    # extract the used quantities (to enable type-hinting)
+    asset: RigidObject = env.scene[asset_cfg.name]
+    return math_utils.quat_rotate_inverse(asset.data.root_quat_w, asset.data.body_ang_acc_w[:, 0, :])
+    return asset.data.body_ang_acc_w
 
 def projected_gravity(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Gravity projection on the asset's root frame."""
