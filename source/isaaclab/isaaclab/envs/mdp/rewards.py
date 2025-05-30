@@ -96,6 +96,17 @@ def flat_orientation_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scen
     asset: RigidObject = env.scene[asset_cfg.name]
     return torch.sum(torch.square(asset.data.projected_gravity_b[:, :2]), dim=1)
 
+def flat_orientation_l2_x(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Penalize base tilt around X-axis (i.e., sideways roll)."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    # Index 1 is the Y-component of projected gravity in body frame
+    return torch.square(asset.data.projected_gravity_b[:, 1])
+
+def flat_orientation_l2_y(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Penalize base tilt around Y-axis (i.e., forward/backward pitch)."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    # Index 0 is the X-component of projected gravity in body frame
+    return torch.square(asset.data.projected_gravity_b[:, 0])
 
 def base_height_l2(
     env: ManagerBasedRLEnv,

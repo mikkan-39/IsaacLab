@@ -81,11 +81,11 @@ class CommandsCfg:
         resampling_time_range=(10.0, 10.0),
         rel_standing_envs=0.02,
         rel_heading_envs=1.0,
-        heading_command=True,
-        heading_control_stiffness=0.5,
+        # heading_command=True,
+        heading_control_stiffness=1.0,
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 1.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
+            lin_vel_x=(0.3, 1.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.3, 0.3), heading=(-math.pi, math.pi)
         ),
     )
 
@@ -97,7 +97,9 @@ class ActionsCfg:
     joint_pos = mdp.JointPositionActionCfg(asset_name="robot", 
                                            joint_names=[controllableJointsRegex], 
                                            scale=1.0, 
-                                           use_default_offset=False)
+                                           use_default_offset=False,
+                                        #    clip={".*": (-1.0, 1.0)}
+                                           )
 
 
 @configclass
@@ -185,16 +187,6 @@ class EventCfg:
         },
     )
 
-    # base_external_force_torque = EventTerm(
-    #     func=mdp.apply_external_force_torque,
-    #     mode="reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
-    #         "force_range": (0.0, 0.0),
-    #         "torque_range": (-0.0, 0.0),
-    #     },
-    # )
-
     push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,
         mode="interval",
@@ -209,8 +201,8 @@ class EventCfg:
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=".*"),
-            "stiffness_distribution_params": (1.0, 3.0),
-            "damping_distribution_params": (0.05, 1.0),
+            "stiffness_distribution_params": (0.5, 1.0),
+            "damping_distribution_params": (0.25, 0.5),
             "operation": "scale",
             "distribution": "log_uniform",
         },
@@ -267,7 +259,7 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
         self.decimation = 2
         self.episode_length_s = 15.0
         # simulation settings
-        self.sim.dt = 1 / 120
+        self.sim.dt = 1 / 50
         self.sim.render_interval = 2
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.device = "cuda:0"

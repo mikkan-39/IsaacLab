@@ -12,42 +12,46 @@ class RTv3Rewards:
     
     alive_reward = RewTerm(func=mdp.is_alive, weight=0.1)
     termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)
+    # std decreased
     track_lin_vel = RewTerm(
         func=mdp.track_lin_vel_xy_yaw_frame_exp,
         weight=100.0, 
-        params={"command_name": "base_velocity", "std": 0.5},
+        params={"command_name": "base_velocity", "std": 0.3},
     )
+    # increased 
     track_ang_vel = RewTerm(
         func=mdp.track_ang_vel_z_world_exp, 
-        weight=30.0, 
+        weight=100.0, 
         params={"command_name": "base_velocity", "std": 0.5}
     )
-    # feet_air_time = RewTerm(
-    #     func=mdp.feet_air_time,
-    #     weight=100.0,
-    #     params={
-    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*Foot"),
-    #         "command_name": "base_velocity",
-    #         "threshold": 0.5,
-    #     },
-    # )
 
-    # lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
-    # ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.5)
-    # base_height = RewTerm(
-    #     func=mdp.base_height, 
-    #     weight=1.0, 
-    #     params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
-    # )
+    # added
+    feet_air_time = RewTerm(
+        func=mdp.feet_air_time,
+        weight=10.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*Foot"),
+            "command_name": "base_velocity",
+            "threshold": 0.3,
+        },
+    )
 
+
+    # now only penalizing side to side tilt
     base_pos = RewTerm(
-        func=mdp.flat_orientation_l2, 
+        func=mdp.flat_orientation_l2_x, 
         weight=-100.0, 
         params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
     )
+    # increased
+    actions_cost_diff = RewTerm(
+        func=mdp.action_rate_l2, 
+        weight=-0.001, # Sheesh.
+    )
+    # new
     actions_cost = RewTerm(
-        func=mdp.action_rate, 
-        weight=-0.001, 
+        func=mdp.action_l2, 
+        weight=-0.001, # Sheesh.
     )
     torque_cost = RewTerm(
         func=mdp.joint_torques_l2, 
@@ -58,9 +62,11 @@ class RTv3Rewards:
         weight=-1.5e-1, 
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*FootJoint.*"])}
     )
+    # Penalize all joint limits except knees.
     dof_limits = RewTerm(
         func=mdp.joint_pos_limits, 
-        weight=-0.01, 
+        weight=-0.1, 
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["^(?!.*to_Tibia).*"])},
     )
 
     # feet_slide = RewTerm(
@@ -81,6 +87,16 @@ class RTv3Rewards:
         weight=-10.0,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_revolute"])},
     )
+    joint_deviation_knees = RewTerm(
+        func=mdp.joint_same_direction_deviation_penalty,
+        weight=-1.0,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*to_Tibia.*"])},
+    )
+    # joint_deviation_hips_all = RewTerm(
+    #     func=mdp.joint_same_direction_deviation_penalty,
+    #     weight=-15.0,
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_to_HipBulk.*"])},
+    # )
     joint_deviation_arms = RewTerm(
         func=mdp.joint_deviation_l1,
         weight=-5.0,
