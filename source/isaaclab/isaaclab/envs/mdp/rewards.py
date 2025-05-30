@@ -176,6 +176,29 @@ def joint_vel_l1(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Ten
     asset: Articulation = env.scene[asset_cfg.name]
     return torch.sum(torch.abs(asset.data.joint_vel[:, asset_cfg.joint_ids]), dim=1)
 
+def hip_vel_same_sign(env: ManagerBasedRLEnv, asset_cfg_a: SceneEntityCfg, asset_cfg_b: SceneEntityCfg, command_name: str) -> torch.Tensor:
+    """
+    Reward joint pairs from two sets when they have the same sign.
+    Reward = average(abs(vel_a), abs(vel_b)) if same sign, else 0
+    """
+    asset: Articulation = env.scene[asset_cfg_a.name]
+
+    vel_a = asset.data.joint_vel[:, asset_cfg_a.joint_ids]  # (B, N)
+    vel_b = asset.data.joint_vel[:, asset_cfg_b.joint_ids]  # (B, N)
+
+    assert vel_a.shape == vel_b.shape, "Joint groups must have same shape"
+
+    sign_match = (torch.sign(vel_a) * torch.sign(vel_b)) > 0  # (B, N), bool
+
+    avg_magnitude = 0.5 * (torch.abs(vel_a) + torch.abs(vel_b))  # (B, N)
+
+    
+    reward = torch.where(sign_match, avg_magnitude, torch.zeros_like(avg_magnitude))
+    reward = torch.sum(reward, dim=1) # (B,)
+    reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1 
+    reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) + 0.2
+
+    return reward
 
 def joint_vel_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Penalize joint velocities on the articulation using L2 squared kernel.
