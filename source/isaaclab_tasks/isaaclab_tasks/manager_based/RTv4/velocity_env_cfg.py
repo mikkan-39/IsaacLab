@@ -15,7 +15,7 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
-from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR
+from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR, NVIDIA_NUCLEUS_DIR
 from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
@@ -25,7 +25,9 @@ import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 ##
 from isaaclab.terrains.config.minirough import MINI_ROUGH_TERRAINS_CFG  # isort: skip
 
-controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Arm|to_Shoulder|shoulder|Foot)).*$"
+# controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Arm|to_Shoulder|shoulder|Foot)).*$"
+controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Arm|to_ShoulderR|to_ShoulderL|Foot)).*$"
+
 ##
 # Scene definition
 ##
@@ -47,7 +49,9 @@ class MySceneCfg(InteractiveSceneCfg):
             dynamic_friction=2.0,
         ),
         visual_material=sim_utils.MdlFileCfg(
-            mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+            # mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
+            # mdl_path=f"{NVIDIA_NUCLEUS_DIR}/Materials/Base/Metals/Aluminum_Anodized.mdl",
+            mdl_path="{NVIDIA_NUCLEUS_DIR}/Materials/Base/Architecture/Shingles_01.mdl",
             project_uvw=True,
             texture_scale=(1.0, 1.25),
         ),
@@ -92,7 +96,7 @@ class CommandsCfg:
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
-        rel_standing_envs=0.02,
+        rel_standing_envs=0.10,
         heading_command=False,
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
