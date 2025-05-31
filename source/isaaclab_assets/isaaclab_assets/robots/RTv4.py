@@ -45,10 +45,12 @@ RT_CFG = ArticulationCfg(
     actuators={
         "ST3215-HS": ImplicitActuatorCfg(
             joint_names_expr=[
-                # ".*",
-                "^(?!.*FootJoint).*",
+                ".*",
+                # "^(?!.*FootJoint).*",
             ],
             velocity_limit_sim=50.0,
+            effort_limit=100.0,
+            effort_limit_sim=100.0,
             stiffness={
                 ".*": 30.0
             },
@@ -59,23 +61,23 @@ RT_CFG = ArticulationCfg(
                 ".*": 0.01
             },
         ),
-        "ST3215-HS-Feet": ImplicitActuatorCfg(
-            joint_names_expr=[
-                ".*FootJoint.*"
-            ],
-            # effort_limit_sim={
-            #     ".*": 0.0
-            # },
-            velocity_limit_sim=50.0,
-            stiffness={
-                ".*": 0.1
-            },
-            damping={
-                ".*": 0.1
-            },
-            armature={
-                ".*": 0.01
-            },
-        ),
+        # "ST3215-HS-Feet": ImplicitActuatorCfg(
+        #     joint_names_expr=[
+        #         ".*FootJoint.*"
+        #     ],
+        #     # effort_limit_sim={
+        #     #     ".*": 0.0
+        #     # },
+        #     velocity_limit_sim=50.0,
+        #     stiffness={
+        #         ".*": 0.1
+        #     },
+        #     damping={
+        #         ".*": 0.1
+        #     },
+        #     armature={
+        #         ".*": 0.01
+        #     },
+        # ),
     },
 )
