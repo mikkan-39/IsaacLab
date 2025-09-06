@@ -37,6 +37,13 @@ class RTv4Rewards:
     )
 
 
+    
+    # base_pos = RewTerm(
+    #     func=mdp.flat_orientation_l2, 
+    #     weight=-1.0, 
+    #     params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
+    # )
+
     # base_pos_x = RewTerm(
     #     func=mdp.flat_orientation_l2_x, 
     #     weight=-100.0, 
@@ -60,7 +67,7 @@ class RTv4Rewards:
     # )
     actions_cost_diff = RewTerm(
         func=mdp.action_rate_l2, 
-        weight=-0.001,
+        weight=-0.1,
     )
 
     # hip_vel_same_sign = RewTerm(
