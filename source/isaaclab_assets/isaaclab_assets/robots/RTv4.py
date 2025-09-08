@@ -48,14 +48,12 @@ RT_CFG = ArticulationCfg(
                 ".*",
                 # "^(?!.*FootJoint).*",
             ],
-            velocity_limit_sim=50.0,
-            effort_limit=100.0,
-            effort_limit_sim=100.0,
+            velocity_limit_sim=20.0,
             stiffness={
-                ".*": 30.0
+                ".*": 10.0
             },
             damping={
-                ".*": 5.0
+                ".*": 1.0
             },
             armature={
                 ".*": 0.01
