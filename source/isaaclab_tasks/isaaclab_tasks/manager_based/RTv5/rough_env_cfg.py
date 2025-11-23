@@ -35,16 +35,18 @@ class RTv5Rewards:
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
             "command_name": "base_velocity",
-            "threshold": 0.2,
+            "threshold": 0.1,
         },
     )
 
-    alternating_feet = RewTerm(
-        func=mdp.alternating_feet,
-        weight=0.1,
+    foot_switch = RewTerm(
+        func=mdp.foot_switch_reward,
+        weight=1.0,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
-            "threshold": 0.1,
+            "command_name": "base_velocity",
+            "velocity_threshold": 0.1,  # Minimum velocity command to activate reward
+            "contact_threshold": 0.1,    # Contact force threshold
         },
     )
 
@@ -92,7 +94,7 @@ class RTv5Rewards:
 
     torque_cost_feet = RewTerm(
         func=mdp.joint_torques_l2, 
-        weight=-1.0e-2, 
+        weight=-5.0e-3, 
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*FootJoint.*"])}
     )
 
@@ -118,21 +120,34 @@ class RTv5Rewards:
 
     joint_deviation_hip_spread = RewTerm(
         func=mdp.joint_same_direction_deviation_penalty,
-        weight=-0.1,
+        weight=-0.01,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_to_HipBulk.*"])},
     )
 
-    # joint_deviation_hip_rotate = RewTerm(
-    #     func=mdp.joint_deviation_l1,
-    #     weight=-0.05,
-    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_revolute"])},
-    # )
+    joint_deviation_hip_rotate = RewTerm(
+        func=mdp.joint_deviation_l1,
+        weight=-0.001,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_revolute"])},
+    )
 
     # joint_deviation_knees = RewTerm(
     #     func=mdp.joint_same_direction_deviation_penalty,
     #     weight=-1.0,
     #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*to_Tibia.*"])},
     # )
+
+    joint_deviation_feet = RewTerm(
+        func=mdp.joint_deviation_l1,
+        weight=-0.1,
+        params={
+            "asset_cfg": SceneEntityCfg(
+                "robot", 
+                joint_names=[
+                    ".*FootJoint.*",
+                ]
+            )
+        },
+    )
 
     joint_deviation_arms = RewTerm(
         func=mdp.joint_deviation_l1,

@@ -412,6 +412,90 @@ def alternating_feet(
     
     return reward  # Shape: [num_envs]
 
+class foot_switch_reward(ManagerTermBase):
+    """Reward foot switches (alternating gait) when velocity command is non-zero.
+    
+    This function rewards when a foot switches from being on ground to off ground,
+    indicating a step transition. It tracks the last foot that was off ground per
+    environment and rewards when a different foot becomes off ground.
+    
+    The reward is:
+    - Positive only
+    - Only active when velocity command is non-zero
+    - Rewards when a foot switch occurs (different foot becomes off ground)
+    """
+    
+    def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+        
+        # Get parameters
+        self.sensor_cfg = cfg.params["sensor_cfg"]
+        self.command_name = cfg.params["command_name"]
+        self.velocity_threshold = cfg.params.get("velocity_threshold", 0.1)
+        self.contact_threshold = cfg.params.get("contact_threshold", 0.1)
+        
+        # Track last foot that was off ground per environment
+        # 0 = left foot, 1 = right foot, -1 = none/unknown
+        self._last_air_foot = torch.full(
+            (env.num_envs,), -1, dtype=torch.long, device=env.device
+        )
+        
+    def reset(self, env_ids: Sequence[int] | None = None) -> None:
+        """Reset state for specified environments."""
+        if env_ids is None:
+            env_ids = slice(None)
+        self._last_air_foot[env_ids] = -1
+    
+    def __call__(
+        self, 
+        env: ManagerBasedRLEnv,
+        sensor_cfg: SceneEntityCfg,
+        command_name: str,
+        velocity_threshold: float = 0.1,
+        contact_threshold: float = 0.1
+    ) -> torch.Tensor:
+        # Extract contact sensor
+        contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+        net_contact_forces = contact_sensor.data.net_forces_w_history
+        
+        # Get most recent contact state
+        # Shape: [num_envs, history_length, 3] -> [num_envs, 3] -> [num_envs]
+        left_force = torch.max(torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids[0]], dim=-1), dim=1)[0]
+        right_force = torch.max(torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids[1]], dim=-1), dim=1)[0]
+        
+        left_contact = left_force > contact_threshold
+        right_contact = right_force > contact_threshold
+        
+        # Determine which foot is currently off ground
+        # 0 = left off, 1 = right off, -1 = both on or both off
+        current_air_foot = torch.full((env.num_envs,), -1, dtype=torch.long, device=env.device)
+        current_air_foot[left_contact & ~right_contact] = 1  # Right foot off
+        current_air_foot[~left_contact & right_contact] = 0    # Left foot off
+        
+        # Detect foot switch: different foot becomes off ground
+        # Switch occurs when:
+        # 1. Current air foot is different from last air foot
+        # 2. Current air foot is valid (not -1)
+        # 3. Last air foot was valid (not -1) or we're starting fresh
+        foot_switched = (
+            (current_air_foot != self._last_air_foot) & 
+            (current_air_foot != -1) &
+            (self._last_air_foot != -1)
+        )
+        
+        # Update tracking (only when a foot is off ground)
+        self._last_air_foot[current_air_foot != -1] = current_air_foot[current_air_foot != -1]
+        
+        # Get velocity command magnitude
+        velocity_cmd = env.command_manager.get_command(command_name)
+        cmd_magnitude = torch.norm(velocity_cmd[:, :2], dim=1)
+        has_velocity = cmd_magnitude > velocity_threshold
+        
+        # Reward: positive when foot switches AND velocity command is non-zero
+        reward = foot_switched.float() * has_velocity.float()
+        
+        return reward
+
 def joint_same_direction_deviation_penalty(
     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
