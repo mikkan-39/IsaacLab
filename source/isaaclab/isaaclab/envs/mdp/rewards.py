@@ -412,6 +412,76 @@ def alternating_feet(
     
     return reward  # Shape: [num_envs]
 
+def feet_collision_penalty(
+    env: ManagerBasedRLEnv, 
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    left_foot_name: str = "LeftFoot",
+    right_foot_name: str = "RightFoot",
+    threshold: float = 0.05
+) -> torch.Tensor:
+    """Penalize collisions between feet.
+    
+    This function detects when the two feet are too close together (colliding)
+    and applies a large penalty.
+    
+    Args:
+        env: The environment.
+        asset_cfg: Configuration for the robot asset.
+        left_foot_name: Name of the left foot body.
+        right_foot_name: Name of the right foot body.
+        threshold: Distance threshold below which feet are considered colliding (in meters).
+    
+    Returns:
+        Penalty tensor of shape (num_envs,). Larger values indicate closer feet/collision.
+    """
+    # Extract the robot asset
+    asset: Articulation = env.scene[asset_cfg.name]
+    
+    # Find foot body IDs
+    left_foot_ids, _ = asset.find_bodies(left_foot_name)
+    right_foot_ids, _ = asset.find_bodies(right_foot_name)
+    
+    if len(left_foot_ids) == 0 or len(right_foot_ids) == 0:
+        return torch.zeros(env.num_envs, device=env.device)
+    
+    left_foot_id = left_foot_ids[0]
+    right_foot_id = right_foot_ids[0]
+    
+    # Get foot positions in world frame
+    # Shape: [num_envs, 3]
+    left_foot_pos = asset.data.body_state_w[:, left_foot_id, :3]
+    right_foot_pos = asset.data.body_state_w[:, right_foot_id, :3]
+    
+    # Compute distance between feet
+    foot_distance = torch.norm(left_foot_pos - right_foot_pos, dim=-1)
+    
+    # Penalty: large when distance is below threshold
+    # Penalty scales from 0 to 1 as distance goes from threshold to 0
+    penalty = torch.clamp((threshold - foot_distance) / threshold, min=0.0, max=1.0)
+    
+    return penalty
+    
+
+def low_torque_reward(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Reward low foot using inverse relationship.
+    
+    Returns a reward that is high when torques are low, encouraging efficient foot usage
+    without excessive toe propulsion. Uses 1/(1 + torque_magnitude) formulation.
+    
+    NOTE: Only the joints configured in :attr:`asset_cfg.joint_ids` will have their 
+    joint torques contribute to the term.
+    """
+    # extract the used quantities (to enable type-hinting)
+    asset: Articulation = env.scene[asset_cfg.name]
+    # compute torque magnitude per joint
+    torque_magnitude = torch.abs(asset.data.applied_torque[:, asset_cfg.joint_ids])
+    # sum across joints to get total foot torque
+    total_torque = torch.sum(torque_magnitude, dim=1)
+    # reward is inverse: high when torque is low
+    # Using 1/(1 + torque) so it's bounded between 0 and 1, with diminishing returns
+    reward = 1.0 / (1.0 + total_torque)
+    return reward
+
 class foot_switch_reward(ManagerTermBase):
     """Reward foot switches (alternating gait) when velocity command is non-zero.
     

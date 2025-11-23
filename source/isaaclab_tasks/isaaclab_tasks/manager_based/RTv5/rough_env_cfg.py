@@ -51,6 +51,17 @@ class RTv5Rewards:
         },
     )
 
+    # feet_collision = RewTerm(
+    #     func=mdp.feet_collision_penalty,
+    #     weight=-100.0,
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "left_foot_name": "LeftFoot",
+    #         "right_foot_name": "RightFoot",
+    #         "threshold": 0.10,  # 10cm threshold
+    #     },
+    # )
+
     lin_vel_z = RewTerm(
         func=mdp.lin_vel_z_l2,
         weight=-0.2,  # Base config uses -2.0, but that might be too high

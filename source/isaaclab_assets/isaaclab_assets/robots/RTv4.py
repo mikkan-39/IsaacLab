@@ -18,7 +18,7 @@ RT_CFG = ArticulationCfg(
             enable_gyroscopic_forces=True,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=False,
+            enabled_self_collisions=True,
             solver_position_iteration_count=4,
             solver_velocity_iteration_count=0,
             sleep_threshold=0.005,
@@ -45,25 +45,8 @@ RT_CFG = ArticulationCfg(
     actuators={
         "ST3215-HS": ImplicitActuatorCfg(
             joint_names_expr=[
-                # ".*",
-                "^(?!.*FootJoint).*",
-            ],
-            effort_limit=2.0,  # 20 kg·cm ≈ 1.96 Nm (rounded up, in N·m)
-            effort_limit_sim=2.0,  # Same as effort_limit
-            velocity_limit_sim=5.0,  # 106 RPM = 11.1 rad/s (rounded down, in rad/s)
-            stiffness={
-                ".*": 12.0  # PD controller stiffness (dimensionless, tuned for stability)
-            },
-            damping={
-                ".*": 2.5  # PD controller damping (dimensionless, tuned for stability)
-            },
-            armature={
-                ".*": 0.01  # Motor armature (kg·m², typical for small motors)
-            },
-        ),
-        "ST3215-HS-Feet": ImplicitActuatorCfg(
-            joint_names_expr=[
-                ".*FootJoint.*"
+                ".*",
+                # "^(?!.*FootJoint).*",
             ],
             effort_limit=2.0,  # 20 kg·cm ≈ 1.96 Nm (rounded up, in N·m)
             effort_limit_sim=2.0,  # Same as effort_limit
