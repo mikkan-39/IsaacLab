@@ -423,6 +423,7 @@ class foot_switch_reward(ManagerTermBase):
     - Positive only
     - Only active when velocity command is non-zero
     - Rewards when a foot switch occurs (different foot becomes off ground)
+    - Only rewards the first N switches per episode to encourage discovery without rapid switching
     """
     
     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
@@ -433,6 +434,7 @@ class foot_switch_reward(ManagerTermBase):
         self.command_name = cfg.params["command_name"]
         self.velocity_threshold = cfg.params.get("velocity_threshold", 0.1)
         self.contact_threshold = cfg.params.get("contact_threshold", 0.1)
+        self.max_switches = cfg.params.get("max_switches", 10)  # Only reward first N switches
         
         # Track last foot that was off ground per environment
         # 0 = left foot, 1 = right foot, -1 = none/unknown
@@ -440,11 +442,17 @@ class foot_switch_reward(ManagerTermBase):
             (env.num_envs,), -1, dtype=torch.long, device=env.device
         )
         
+        # Track number of switches per environment
+        self._switch_count = torch.zeros(
+            (env.num_envs,), dtype=torch.long, device=env.device
+        )
+        
     def reset(self, env_ids: Sequence[int] | None = None) -> None:
         """Reset state for specified environments."""
         if env_ids is None:
             env_ids = slice(None)
         self._last_air_foot[env_ids] = -1
+        self._switch_count[env_ids] = 0
     
     def __call__(
         self, 
@@ -452,8 +460,15 @@ class foot_switch_reward(ManagerTermBase):
         sensor_cfg: SceneEntityCfg,
         command_name: str,
         velocity_threshold: float = 0.1,
-        contact_threshold: float = 0.1
+        contact_threshold: float = 0.1,
+        max_switches: int = 10
     ) -> torch.Tensor:
+        # Early exit: check if we can still reward before expensive computations
+        can_reward = self._switch_count < max_switches
+        if not can_reward.any():
+            # All environments have hit the limit, return zeros
+            return torch.zeros(env.num_envs, device=env.device)
+        
         # Extract contact sensor
         contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
         net_contact_forces = contact_sensor.data.net_forces_w_history
@@ -491,10 +506,124 @@ class foot_switch_reward(ManagerTermBase):
         cmd_magnitude = torch.norm(velocity_cmd[:, :2], dim=1)
         has_velocity = cmd_magnitude > velocity_threshold
         
-        # Reward: positive when foot switches AND velocity command is non-zero
-        reward = foot_switched.float() * has_velocity.float()
+        # Reward: positive when foot switches AND velocity command is non-zero AND within switch limit
+        reward = foot_switched.float() * has_velocity.float() * can_reward.float()
+        
+        # Increment switch count when a switch occurs
+        switched_mask = foot_switched & has_velocity
+        self._switch_count[switched_mask] += 1
         
         return reward
+
+# class foot_switch_reward(ManagerTermBase):
+#     """Reward foot switches (alternating gait) when velocity command is non-zero.
+    
+#     This function rewards when a foot switches from being on ground to off ground,
+#     indicating a step transition. The reward is scaled by time since last switch to
+#     discourage rapid foot switching and encourage natural step timing.
+    
+#     The reward is:
+#     - Positive only
+#     - Only active when velocity command is non-zero
+#     - Rewards when a foot switch occurs (different foot becomes off ground)
+#     - Scaled by time since last switch (longer time = larger reward)
+#     """
+    
+#     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+#         super().__init__(cfg, env)
+        
+#         # Get parameters
+#         self.sensor_cfg = cfg.params["sensor_cfg"]
+#         self.command_name = cfg.params["command_name"]
+#         self.velocity_threshold = cfg.params.get("velocity_threshold", 0.1)
+#         self.contact_threshold = cfg.params.get("contact_threshold", 0.1)
+#         self.min_step_time = cfg.params.get("min_step_time", 0.1)  # Minimum time for full reward
+#         self.max_step_time = cfg.params.get("max_step_time", 1.0)  # Time beyond which reward saturates
+        
+#         # Track last foot that was off ground per environment
+#         # 0 = left foot, 1 = right foot, -1 = none/unknown
+#         self._last_air_foot = torch.full(
+#             (env.num_envs,), -1, dtype=torch.long, device=env.device
+#         )
+        
+#         # Track time since last switch per environment
+#         self._time_since_last_switch = torch.zeros(
+#             (env.num_envs,), dtype=torch.float32, device=env.device
+#         )
+        
+#     def reset(self, env_ids: Sequence[int] | None = None) -> None:
+#         """Reset state for specified environments."""
+#         if env_ids is None:
+#             env_ids = slice(None)
+#         self._last_air_foot[env_ids] = -1
+#         self._time_since_last_switch[env_ids] = 0.0
+    
+#     def __call__(
+#         self, 
+#         env: ManagerBasedRLEnv,
+#         sensor_cfg: SceneEntityCfg,
+#         command_name: str,
+#         velocity_threshold: float = 0.1,
+#         contact_threshold: float = 0.1,
+#         min_step_time: float = 0.1,
+#         max_step_time: float = 1.0
+#     ) -> torch.Tensor:
+#         # Increment timer FIRST (before detecting switch)
+#         self._time_since_last_switch += env.step_dt
+        
+#         # Extract contact sensor
+#         contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+#         net_contact_forces = contact_sensor.data.net_forces_w_history
+        
+#         # Get most recent contact state
+#         # Shape: [num_envs, history_length, 3] -> [num_envs, 3] -> [num_envs]
+#         left_force = torch.max(torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids[0]], dim=-1), dim=1)[0]
+#         right_force = torch.max(torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids[1]], dim=-1), dim=1)[0]
+        
+#         left_contact = left_force > contact_threshold
+#         right_contact = right_force > contact_threshold
+        
+#         # Determine which foot is currently off ground
+#         # 0 = left off, 1 = right off, -1 = both on or both off
+#         current_air_foot = torch.full((env.num_envs,), -1, dtype=torch.long, device=env.device)
+#         current_air_foot[left_contact & ~right_contact] = 1  # Right foot off
+#         current_air_foot[~left_contact & right_contact] = 0    # Left foot off
+        
+#         # Detect foot switch: different foot becomes off ground
+#         foot_switched = (
+#             (current_air_foot != self._last_air_foot) & 
+#             (current_air_foot != -1) &
+#             (self._last_air_foot != -1)
+#         )
+        
+#         # Get velocity command magnitude
+#         velocity_cmd = env.command_manager.get_command(command_name)
+#         cmd_magnitude = torch.norm(velocity_cmd[:, :2], dim=1)
+#         has_velocity = cmd_magnitude > velocity_threshold
+        
+#         # Scale reward by time since last switch
+#         # Reward scales from 0 (at time=0) to 1 (at min_step_time), then saturates
+#         # This discourages rapid switching while rewarding natural step timing
+#         time_scale = torch.clamp(
+#             self._time_since_last_switch / min_step_time,
+#             min=0.0,
+#             max=1.0
+#         )
+        
+#         # Compute reward: positive when foot switches AND velocity command is non-zero
+#         # Scaled by time since last switch
+#         reward = foot_switched.float() * has_velocity.float() * time_scale
+        
+#         # Update tracking: update last_air_foot whenever a foot is off ground (not just on switch)
+#         # This ensures we track the state correctly even during double-support phases
+#         update_mask = current_air_foot != -1
+#         self._last_air_foot[update_mask] = current_air_foot[update_mask]
+        
+#         # Reset timer when switch occurs
+#         switched_mask = foot_switched & has_velocity
+#         self._time_since_last_switch[switched_mask] = 0.0
+        
+#         return reward
 
 def joint_same_direction_deviation_penalty(
     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
