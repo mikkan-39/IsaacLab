@@ -396,25 +396,21 @@ def alternating_feet(
 
     # Get the net contact forces for the feet (accessing the contact sensor data)
     net_contact_forces = contact_sensor.data.net_forces_w_history
-
-    # Check if the feet are in contact: True if the norm of contact force > threshold (indicating contact)
-    left_contact = torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids[0]], dim=-1) > threshold
-    right_contact = torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids[1]], dim=-1) > threshold
-
-    # Debugging the contact states
-    # print(f"Left contact shape: {left_contact.shape}, Right contact shape: {right_contact.shape}")
-
-    # Ensure both tensors have the same shape before calculating reward
-    if left_contact.shape != right_contact.shape:
-        raise ValueError(f"Shape mismatch between left_contact ({left_contact.shape}) and right_contact ({right_contact.shape})")
-
+    
+    # Get most recent contact state (like undesired_contacts does)
+    # Shape: [num_envs, history_length, 3] -> [num_envs, 3] -> [num_envs]
+    left_force = torch.max(torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids[0]], dim=-1), dim=1)[0]
+    right_force = torch.max(torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids[1]], dim=-1), dim=1)[0]
+    
+    left_contact = left_force > threshold
+    right_contact = right_force > threshold
+    
     # Reward when one foot is in contact while the other is not (alternating)
     reward = torch.where(left_contact ^ right_contact, 1.0,  # Alternating steps
              torch.where(left_contact & right_contact, -0.5,  # Both feet touching
              -0.2))  # Both feet in air
-
-    # Return the sum of rewards for each environment
-    return torch.sum(reward, dim=1)
+    
+    return reward  # Shape: [num_envs]
 
 def joint_same_direction_deviation_penalty(
     env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
