@@ -47,6 +47,7 @@ class RTv5Rewards:
             "command_name": "base_velocity",
             "velocity_threshold": 0.1,  # Minimum velocity command to activate reward
             "contact_threshold": 0.1,    # Contact force threshold
+            "max_switches": 10,  # Only reward first 10 switches per episode
         },
     )
 
@@ -94,7 +95,7 @@ class RTv5Rewards:
 
     torque_cost_feet = RewTerm(
         func=mdp.joint_torques_l2, 
-        weight=-5.0e-3, 
+        weight=-5.0e-2, 
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*FootJoint.*"])}
     )
 
@@ -103,7 +104,8 @@ class RTv5Rewards:
         func=mdp.joint_pos_limits, 
         weight=-1.0, 
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[
-            controllableJointsRegex.replace(")).*$", "|to_Tibia)).*$")
+            # controllableJointsRegex.replace(")).*$", "|to_Tibia)).*$")
+            controllableJointsRegex
         ])},
     )
 
