@@ -26,7 +26,8 @@ import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from isaaclab.terrains.config.minirough import MINI_ROUGH_TERRAINS_CFG  # isort: skip
 
 # controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Arm|to_Shoulder|shoulder|Foot)).*$"
-controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Arm|to_ShoulderR|to_ShoulderL|Foot)).*$"
+# controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Arm|to_ShoulderR|to_ShoulderL|Foot)).*$"
+controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Arm|to_ShoulderR|to_ShoulderL)).*$"
 
 ##
 # Scene definition
@@ -96,9 +97,9 @@ class CommandsCfg:
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
-        rel_standing_envs=0.10,
+        rel_standing_envs=0.01,
         heading_command=False,
-        debug_vis=True,
+        debug_vis=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(0.0, 1.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0)
         ),
@@ -113,6 +114,7 @@ class ActionsCfg:
                                            joint_names=[controllableJointsRegex], 
                                            scale=0.5, 
                                            use_default_offset=True,
+                                           preserve_order=True,
                                         #    clip={".*": (-1.0, 1.0)}
                                            )
 
