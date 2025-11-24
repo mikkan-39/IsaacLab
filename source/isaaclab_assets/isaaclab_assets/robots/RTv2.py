@@ -51,8 +51,8 @@ RTV2_CFG = ArticulationCfg(
     actuators={
         "ST3215-HS": ImplicitActuatorCfg(
             joint_names_expr=[
-                # "^(?!.*FootJoint).*"
-                ".*"
+                "^(?!.*FootJoint).*"
+                # ".*"
             ],
             effort_limit_sim={
                 ".*": 2.0
@@ -69,25 +69,26 @@ RTV2_CFG = ArticulationCfg(
                 ".*": 0.01
             },
         ),
-        # "feet": ImplicitActuatorCfg(
-        #     joint_names_expr=[
-        #         ".*FootJoint.*"
-        #     ],
-        #     effort_limit={
-        #         ".*to_FootJoint.*": 10.75,
-        #         ".*Foot_revolute.*": 10.25
-        #     },
-        #     velocity_limit=100.0,
-        #     stiffness={
-        #         ".*": 10.0
-        #     },
-        #     damping={
-        #         ".*": 1.3
-        #     },
-        #     armature={
-        #         ".*": 0.01
-        #     },
-        # )
+        "feet": ImplicitActuatorCfg(
+            joint_names_expr=[
+                ".*FootJoint.*"
+            ],
+            effort_limit={
+                ".*to_FootJoint.*": 0.75,
+                ".*Foot_revolute.*": 0.75
+            },
+            velocity_limit=100.0,
+            velocity_limit_sim=150.0,
+            stiffness={
+                ".*": 2.0
+            },
+            damping={
+                ".*": 0.2
+            },
+            armature={
+                ".*": 0.01
+            },
+        )
     },
 )
 
