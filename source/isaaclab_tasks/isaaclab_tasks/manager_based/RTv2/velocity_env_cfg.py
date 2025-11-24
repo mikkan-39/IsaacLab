@@ -1,8 +1,3 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers.
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
-
 import math
 from dataclasses import MISSING
 
@@ -34,8 +29,6 @@ from isaaclab.terrains.config.minirough import MINI_ROUGH_TERRAINS_CFG  # isort:
 ##
 # Scene definition
 ##
-
-
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
     """Configuration for the terrain scene with a legged robot."""
@@ -64,14 +57,16 @@ class MySceneCfg(InteractiveSceneCfg):
     robot: ArticulationCfg = MISSING # type: ignore
     # sensors
     # height_scanner = RayCasterCfg(
-    #     prim_path="{ENV_REGEX_NS}/Robot/Robot/base_link",
-    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
-    #     attach_yaw_only=True,
-    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]), # type: ignore
-    #     debug_vis=False,
+    #     prim_path="{ENV_REGEX_NS}/Robot/Robot/Head",
+    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 3.0), rot=(0.0, 0.0, 1.0, 0.0)),
+    #     attach_yaw_only=False,
+    #     max_distance=2,
+    #     # pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]), # type: ignore
+    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[0.01, 0.01]), # type: ignore
+    #     debug_vis=True,
     #     mesh_prim_paths=["/World/ground"],
     # )
-    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/Robot/.*", history_length=3, track_air_time=True)
+    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
@@ -100,7 +95,7 @@ class CommandsCfg:
         heading_control_stiffness=0.5,
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.25, 0.25), lin_vel_y=(-0.25, 0.25), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
+            lin_vel_x=(-0.1, 0.1), lin_vel_y=(-0.5, 0.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
         ),
     )
 
@@ -131,6 +126,8 @@ class ObservationsCfg:
         joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
         joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))
         actions = ObsTerm(func=mdp.last_action)
+
+        height_scan = None
         # height_scan = ObsTerm(
         #     func=mdp.height_scan,
         #     params={"sensor_cfg": SceneEntityCfg("height_scanner")},
@@ -156,6 +153,8 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
+            # "static_friction_range": (0.8, 0.8),
+            # "dynamic_friction_range": (0.6, 0.6),
             "static_friction_range": (0.8, 0.8),
             "dynamic_friction_range": (0.6, 0.6),
             "restitution_range": (0.0, 0.0),
@@ -167,8 +166,8 @@ class EventCfg:
         func=mdp.randomize_rigid_body_mass,
         mode="startup",
         params={
-            "asset_cfg": SceneEntityCfg("robot", body_names="base_link"),
-            "mass_distribution_params": (-0.3, 0.3),
+            "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+            "mass_distribution_params": (0.0, 0.25),
             "operation": "add",
         },
     )
@@ -204,7 +203,7 @@ class EventCfg:
         func=mdp.reset_joints_by_scale,
         mode="reset",
         params={
-            "position_range": (0.5, 1.5),
+            "position_range": (-1.0, 1.0),
             "velocity_range": (0.0, 0.0),
         },
     )
@@ -213,8 +212,9 @@ class EventCfg:
     push_robot = EventTerm(
         func=mdp.push_by_setting_velocity,
         mode="interval",
-        interval_range_s=(10.0, 15.0),
-        params={"velocity_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5)}},
+        interval_range_s=(3.0, 7.0),
+        params={"velocity_range": {"x": (-0.3, 0.3), "y": (-0.3, 0.3)}},
+        
     )
 
 
@@ -241,14 +241,14 @@ class RewardsCfg:
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*Foot"),
             "command_name": "base_velocity",
-            "threshold": 0.075,
+            "threshold": 0.05,
         },
     )
-    # undesired_contacts = RewTerm(
-    #     func=mdp.undesired_contacts,
-    #     weight=-1.0,
-    #     params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*THIGH"), "threshold": 1.0},
-    # )
+    undesired_contacts = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="Hip*"), "threshold": 1.0},
+    )
     # -- optional penalties
     flat_orientation_l2 = RewTerm(func=mdp.flat_orientation_l2, weight=0.0)
     dof_pos_limits = RewTerm(func=mdp.joint_pos_limits, weight=0.0)
@@ -259,14 +259,14 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    # base_contact = DoneTerm(
-        # func=mdp.illegal_contact,
-        # params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 1.0},
-    # )
+    base_contact = DoneTerm(
+        func=mdp.illegal_contact,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=[".*base.*", ".*Arm.*"]), "threshold": 1.0},
+    )
     fall = DoneTerm(
         func=mdp.bad_orientation,
         #45 degrees = 0.78 rad
-        params={"limit_angle": 0.78, "asset_cfg": SceneEntityCfg("robot", body_names=[".*base.*"])}
+        params={"limit_angle": 1.3, "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
     )
 
 
@@ -306,8 +306,9 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
         self.episode_length_s = 20.0
         # simulation settings
         self.sim.dt = 0.005
-        self.sim.render_interval = self.decimation
+        self.sim.render_interval = 4
         self.sim.physics_material = self.scene.terrain.physics_material
+        
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
         # update sensor update periods
         # we tick all the sensors based on the smallest update period (physics update period)
