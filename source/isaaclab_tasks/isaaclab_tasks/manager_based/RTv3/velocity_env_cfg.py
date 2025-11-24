@@ -85,7 +85,7 @@ class CommandsCfg:
         heading_control_stiffness=0.5,
         debug_vis=True,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.0, 1.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
+            lin_vel_x=(0.0, 1.0), lin_vel_y=(-0.15, 0.15), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
         ),
     )
 
@@ -96,8 +96,8 @@ class ActionsCfg:
 
     joint_pos = mdp.JointPositionActionCfg(asset_name="robot", 
                                            joint_names=[controllableJointsRegex], 
-                                           scale=1.5, 
-                                           use_default_offset=True)
+                                           scale=1.0, 
+                                           use_default_offset=False)
 
 
 @configclass
@@ -162,7 +162,7 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-0, 0)},
             "velocity_range": {
                 "x": (-0.0, 0.0),
                 "y": (-0.0, 0.0),
@@ -184,14 +184,10 @@ class TerminationsCfg:
     """Termination terms for the MDP."""
 
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
-    base_contact = DoneTerm(
-        func=mdp.illegal_contact,
-        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=[".*base.*", ".*Arm.*"]), "threshold": 1.0},
-    )
     fall = DoneTerm(
-        func=mdp.bad_orientation,
+        func=mdp.root_height_below_minimum,
         #45 degrees = 0.78 rad
-        params={"limit_angle": 0.78, "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
+        params={"minimum_height": 0.25, "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
     )
 
 
@@ -221,11 +217,11 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 4
-        self.episode_length_s = 20.0
+        self.decimation = 2
+        self.episode_length_s = 15.0
         # simulation settings
-        self.sim.dt = 0.005
-        self.sim.render_interval = 4
+        self.sim.dt = 1 / 120
+        self.sim.render_interval = 2
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.device = "cuda:0"
         self.sim.enable_scene_query_support = False
