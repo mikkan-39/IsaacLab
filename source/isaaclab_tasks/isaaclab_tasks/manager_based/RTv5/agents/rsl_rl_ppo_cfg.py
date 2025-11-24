@@ -8,7 +8,7 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 32
     max_iterations = 3000
     save_interval = 50
-    experiment_name = "RTv4_rough"
+    experiment_name = "RTv5_rough"
     empirical_normalization = True
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
@@ -40,4 +40,4 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
 class RTv5FlatPPORunnerCfg(RTv5RoughPPORunnerCfg):
     def __post_init__(self):
         super().__post_init__() # type: ignore
-        self.experiment_name = "RTv4_flat"
+        self.experiment_name = "RTv5_flat"
