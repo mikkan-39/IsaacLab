@@ -113,18 +113,18 @@ class RTv4Rewards:
     #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_to_HipBulk.*"])},
     # )
 
-    # joint_deviation_arms = RewTerm(
-    #     func=mdp.joint_deviation_l1,
-    #     weight=-1.0,
-    #     params={
-    #         "asset_cfg": SceneEntityCfg(
-    #             "robot", 
-    #             joint_names=[
-    #                 "base_link_to_shoulder.*",
-    #             ]
-    #         )
-    #     },
-    # )
+    joint_deviation_arms = RewTerm(
+        func=mdp.joint_deviation_l1,
+        weight=-0.2,
+        params={
+            "asset_cfg": SceneEntityCfg(
+                "robot", 
+                joint_names=[
+                    "base_link_to_shoulder.*",
+                ]
+            )
+        },
+    )
 
 @configclass
 class RTv4RewardsShitty:

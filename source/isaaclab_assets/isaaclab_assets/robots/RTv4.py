@@ -10,7 +10,7 @@ from isaaclab.assets import ArticulationCfg
 RT_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
     spawn=sim_utils.UsdFileCfg(
-        usd_path="C:/Users/Mikkan/Documents/IsaacBS/Robot_URDF/Ididathing.usd",
+        usd_path="C:/Users/Mikkan/Documents/IsaacBS/Robot_URDF/WithConfiggedArms.usd",
         activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=None,
@@ -29,22 +29,23 @@ RT_CFG = ArticulationCfg(
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.35),
         # rot=(1, 0, 0, 1),
-        # joint_pos={
-        #     ".*HipR_to.*": -0.6,
-        #     ".*HipL_to.*": 0.6,
-        #     ".*to_HipR.*": 0.3,
-        #     ".*to_HipL.*": -0.3,
-        #     ".*to_FootJointR.*": -0.3,
-        #     ".*to_FootJointL.*": -0.3,
-        #     ".*to_Arm.*": -1.5,
-        #     ".*to_Shoulder.*": -0.5,
-        # },
+        joint_pos={
+            # ".*HipR_to.*": -0.6,
+            # ".*HipL_to.*": 0.6,
+            # ".*to_HipR.*": 0.3,
+            # ".*to_HipL.*": -0.3,
+            # ".*to_FootJointR.*": -0.3,
+            # ".*to_FootJointL.*": -0.3,
+            ".*to_Arm.*": -1.5,
+            ".*to_Shoulder.*": -0.5,
+        },
         joint_vel={".*": 0.0},
     ),
     soft_joint_pos_limit_factor=0.9,
     actuators={
         "ST3215-HS": ImplicitActuatorCfg(
             joint_names_expr=[
+                # ".*",
                 "^(?!.*FootJoint).*",
             ],
             velocity_limit_sim=50.0,
@@ -67,10 +68,10 @@ RT_CFG = ArticulationCfg(
             # },
             velocity_limit_sim=50.0,
             stiffness={
-                ".*": 0.5
+                ".*": 0.1
             },
             damping={
-                ".*": 0.5
+                ".*": 0.1
             },
             armature={
                 ".*": 0.01
