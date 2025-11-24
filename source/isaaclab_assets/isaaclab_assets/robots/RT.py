@@ -29,26 +29,27 @@ RT_CFG = ArticulationCfg(
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.35),
         # rot=(1, 0, 0, 1),
-        # joint_pos={
-        #     ".*HipR_to.*": -0.6,
-        #     ".*HipL_to.*": 0.6,
-        #     ".*to_HipR.*": 0.3,
-        #     ".*to_HipL.*": -0.3,
-        #     ".*to_FootJointR.*": -0.3,
-        #     ".*to_FootJointL.*": -0.3,
+        joint_pos={
+            ".*HipR_to.*": -0.6,
+            ".*HipL_to.*": 0.6,
+            ".*to_HipR.*": 0.3,
+            ".*to_HipL.*": -0.3,
+            ".*to_FootJointR.*": -0.3,
+            ".*to_FootJointL.*": -0.3,
 
-        #     ".*to_Arm.*": -1.6,
-        #     # "base_link_to_shoulder_joint_v1_revolute": -0.78,
-        #     # "base_link_to_shoulder_joint_v1Mirror_revolute": 0.78,
-        #     # ".*to_Shoulder.*": -0.3
-        # },
+            ".*to_Arm.*": -1.6,
+            "base_link_to_shoulder_joint_v1_revolute": -0.78,
+            "base_link_to_shoulder_joint_v1Mirror_revolute": 0.78,
+            ".*to_Shoulder.*": -0.3
+        },
         joint_vel={".*": 0.0},
     ),
     soft_joint_pos_limit_factor=0.9,
     actuators={
         "ST3215-HS": ImplicitActuatorCfg(
             joint_names_expr=[
-                ".*",
+                # "^(?!.*FootJoint).*",
+                ".*"
             ],
             velocity_limit_sim=150.0,
             stiffness={
@@ -61,5 +62,23 @@ RT_CFG = ArticulationCfg(
                 ".*": 0.01
             },
         ),
+        # "ST3215-HS-Feet": ImplicitActuatorCfg(
+        #     joint_names_expr=[
+        #         ".*FootJoint.*"
+        #     ],
+        #     effort_limit_sim={
+        #         ".*": 0.75
+        #     },
+        #     velocity_limit_sim=150.0,
+        #     stiffness={
+        #         ".*": 2.0
+        #     },
+        #     damping={
+        #         ".*": 0.2
+        #     },
+        #     armature={
+        #         ".*": 0.01
+        #     },
+        # ),
     },
 )
