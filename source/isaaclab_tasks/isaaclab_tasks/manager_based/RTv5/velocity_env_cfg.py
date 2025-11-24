@@ -115,7 +115,7 @@ class ActionsCfg:
                                            scale=1.0, 
                                            use_default_offset=True,
                                            preserve_order=True,
-                                        #    clip={".*": (-1.0, 1.0)}
+                                           clip={".*": (-1.0, 1.0)}
                                            )
 
 

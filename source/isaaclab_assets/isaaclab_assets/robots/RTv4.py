@@ -48,15 +48,17 @@ RT_CFG = ArticulationCfg(
                 ".*",
                 # "^(?!.*FootJoint).*",
             ],
-            velocity_limit_sim=20.0,
+            effort_limit=2.0,  # 20 kg·cm ≈ 1.96 Nm (rounded up, in N·m)
+            effort_limit_sim=2.0,  # Same as effort_limit
+            velocity_limit_sim=11.0,  # 106 RPM = 11.1 rad/s (rounded down, in rad/s)
             stiffness={
-                ".*": 10.0
+                ".*": 12.0  # PD controller stiffness (dimensionless, tuned for stability)
             },
             damping={
-                ".*": 1.0
+                ".*": 2.5  # PD controller damping (dimensionless, tuned for stability)
             },
             armature={
-                ".*": 0.01
+                ".*": 0.01  # Motor armature (kg·m², typical for small motors)
             },
         ),
         # "ST3215-HS-Feet": ImplicitActuatorCfg(
