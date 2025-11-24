@@ -14,7 +14,9 @@ class RTv2RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         init_noise_std=1.0,
         actor_hidden_dims=[512, 256, 128],
         critic_hidden_dims=[512, 256, 128],
-        activation="elu",
+        # actor_hidden_dims=[512, 256, 512, 256, 128],
+        # critic_hidden_dims=[512, 256, 512, 256, 128],
+        activation="sigmoid",
     )
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,

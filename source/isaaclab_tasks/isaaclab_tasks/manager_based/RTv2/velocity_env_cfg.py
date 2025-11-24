@@ -49,7 +49,7 @@ class MySceneCfg(InteractiveSceneCfg):
         visual_material=sim_utils.MdlFileCfg(
             mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
             project_uvw=True,
-            texture_scale=(0.25, 0.25),
+            texture_scale=(1.0, 1.25),
         ),
         debug_vis=False,
     )
@@ -66,6 +66,15 @@ class MySceneCfg(InteractiveSceneCfg):
     #     debug_vis=True,
     #     mesh_prim_paths=["/World/ground"],
     # )
+    # height_scanner = RayCasterCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot/base_link",
+    #     offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 20.0)),
+    #     attach_yaw_only=False,
+    #     pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[0.4, 0.25]), # type: ignore
+    #     debug_vis=True,
+    #     mesh_prim_paths=["/World/ground"],
+    # )
+    
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
     # lights
     sky_light = AssetBaseCfg(
@@ -93,7 +102,7 @@ class CommandsCfg:
         rel_heading_envs=1.0,
         heading_command=True,
         heading_control_stiffness=0.5,
-        debug_vis=True,
+        debug_vis=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(-0.1, 0.1), lin_vel_y=(-1.0, 0.0), ang_vel_z=(-1.0, 1.0), heading=(-math.pi, math.pi)
         ),
@@ -104,7 +113,10 @@ class CommandsCfg:
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", joint_names=[".*"], scale=0.5, use_default_offset=True)
+    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", 
+                                           joint_names=["^(?!.*(Neck|to_Elbow|to_Shoulder)).*$"], 
+                                           scale=1.5, 
+                                           use_default_offset=True)
 
 
 @configclass
@@ -123,8 +135,12 @@ class ObservationsCfg:
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )
         velocity_commands = ObsTerm(func=mdp.generated_commands, params={"command_name": "base_velocity"})
-        joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01))
-        joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5))
+        joint_pos = ObsTerm(func=mdp.joint_pos_rel, noise=Unoise(n_min=-0.01, n_max=0.01), params={"asset_cfg": SceneEntityCfg(
+            "robot", joint_names=["^(?!.*(Neck|to_Elbow|to_Shoulder)).*$"]
+        )})
+        joint_vel = ObsTerm(func=mdp.joint_vel_rel, noise=Unoise(n_min=-1.5, n_max=1.5), params={"asset_cfg": SceneEntityCfg(
+            "robot", joint_names=["^(?!.*(Neck|to_Elbow|to_Shoulder)).*$"]
+        )})
         actions = ObsTerm(func=mdp.last_action)
 
         height_scan = None
@@ -155,8 +171,8 @@ class EventCfg:
             "asset_cfg": SceneEntityCfg("robot", body_names=".*"),
             # "static_friction_range": (0.8, 0.8),
             # "dynamic_friction_range": (0.6, 0.6),
-            "static_friction_range": (0.8, 0.8),
-            "dynamic_friction_range": (0.6, 0.6),
+            "static_friction_range": (1.2, 1.2),
+            "dynamic_friction_range": (1.0, 1.0),
             "restitution_range": (0.0, 0.0),
             "num_buckets": 64,
         },
@@ -187,7 +203,7 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
+            "pose_range": {"x": (-1.0, 1.0), "y": (-1.0, 1.0), "yaw": (-3.14, 3.14)},
             "velocity_range": {
                 "x": (-0.5, 0.5),
                 "y": (-0.5, 0.5),
@@ -231,7 +247,7 @@ class RewardsCfg:
     )
     # -- penalties
     lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")})
-    lin_vel_feet = RewTerm(func=mdp.lin_vel_z_l2, weight=2.0, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*Foot")})
+    # lin_vel_feet = RewTerm(func=mdp.lin_vel_z_l2, weight=2.0, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*Foot")})
     ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05, params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")})
     dof_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
     dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
