@@ -10,7 +10,7 @@ from isaaclab.assets import ArticulationCfg
 RT_CFG = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Robot",
     spawn=sim_utils.UsdFileCfg(
-        usd_path="C:/Users/Mikkan/Documents/IsaacBS/Robot_URDF/AnotherAttempt.usd",
+        usd_path="C:/Users/Mikkan/Documents/IsaacBS/Robot_URDF/Ididathing.usd",
         activate_contact_sensors=True,
         rigid_props=sim_utils.RigidBodyPropertiesCfg(
             disable_gravity=None,
@@ -28,7 +28,7 @@ RT_CFG = ArticulationCfg(
     ),
     init_state=ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.35),
-        rot=(1, 0, 0, 1),
+        # rot=(1, 0, 0, 1),
         joint_pos={
             ".*HipR_to.*": -0.6,
             ".*HipL_to.*": 0.6,
