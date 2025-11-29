@@ -12,7 +12,7 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
-from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns
+from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns, ImuCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR, NVIDIA_NUCLEUS_DIR
@@ -61,7 +61,19 @@ class MySceneCfg(InteractiveSceneCfg):
     # robots
     robot: ArticulationCfg = MISSING # type: ignore
     
-    contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
+    contact_forces = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/.*", 
+        history_length=3, 
+        track_air_time=True,
+        force_threshold=1.0  # Restore old behavior (was bugged to 1.0, now defaults to 0.0)
+    )
+    
+    # # Add IMU sensor at robot root/base
+    # imu = ImuCfg(
+    #     prim_path="{ENV_REGEX_NS}/Robot",  # Try articulation root itself
+    #     update_period=0.0,
+    #     gravity_bias=(0.0, 0.0, 9.81),
+    # )
     # lights
     sky_light = AssetBaseCfg(
         prim_path="/World/skyLight",
@@ -127,14 +139,12 @@ class ObservationsCfg:
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
 
-        # observation terms (order preserved)
         base_lin_acc = ObsTerm(
-            func=mdp.base_lin_acc, 
-            # noise=Unoise(n_min=-0.1, n_max=0.1)
+            func=mdp.base_lin_acc_from_vel,  # Linear acceleration from LIS331DLH accelerometer
+            # noise=Unoise(n_min=-0.1, n_max=0.1)  # Add sensor noise to match real sensor
         )
-        base_ang_acc = ObsTerm(
-            func=mdp.base_ang_acc, 
-            # noise=Unoise(n_min=-0.2, n_max=0.2)
+        base_ang_vel = ObsTerm(
+            func=mdp.base_ang_vel
         )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
@@ -292,12 +302,20 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.device = "cuda:0"
         self.sim.enable_scene_query_support = False
+
+        self.sim.physx.enable_stabilization = True
         
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
         # update sensor update periods
         # we tick all the sensors based on the smallest update period (physics update period)
         # if self.scene.height_scanner is not None:
         #     self.scene.height_scanner.update_period = self.decimation * self.sim.dt
+
+        self.viewer.eye = (1.0, 1.0, 0.3)  # Camera position (x, y, z)
+        # self.viewer.origin_type = "robot" 
+        self.viewer.origin_type = "asset_root"  # Track the robot's root
+        self.viewer.asset_name = "robot"  # Asset to track
+
         if self.scene.contact_forces is not None:
             self.scene.contact_forces.update_period = self.sim.dt
 

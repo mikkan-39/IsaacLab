@@ -66,20 +66,24 @@ def base_ang_vel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCf
     asset: RigidObject = env.scene[asset_cfg.name]
     return asset.data.root_ang_vel_b
 
+@generic_io_descriptor(
+    units="m/s^2", axes=["X", "Y", "Z"], observation_type="RootState", on_inspect=[record_shape, record_dtype]
+)
 def base_lin_acc(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Root linear velocity in the asset's root frame."""
+    """Root linear acceleration in the asset's root frame."""
     # extract the used quantities (to enable type-hinting)
     asset: RigidObject = env.scene[asset_cfg.name]
-    return math_utils.quat_rotate_inverse(asset.data.root_quat_w, asset.data.body_lin_acc_w[:, 0, :])
-    return asset.data.body_lin_acc_w
+    return math_utils.quat_apply_inverse(asset.data.root_quat_w, asset.data.body_lin_acc_w[:, 0, :])
 
 
+@generic_io_descriptor(
+    units="rad/s^2", axes=["X", "Y", "Z"], observation_type="RootState", on_inspect=[record_shape, record_dtype]
+)
 def base_ang_acc(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Root angular velocity in the asset's root frame."""
+    """Root angular acceleration in the asset's root frame."""
     # extract the used quantities (to enable type-hinting)
     asset: RigidObject = env.scene[asset_cfg.name]
-    return math_utils.quat_rotate_inverse(asset.data.root_quat_w, asset.data.body_ang_acc_w[:, 0, :])
-    return asset.data.body_ang_acc_w
+    return math_utils.quat_apply_inverse(asset.data.root_quat_w, asset.data.body_ang_acc_w[:, 0, :])
 
 @generic_io_descriptor(
     units="m/s^2", axes=["X", "Y", "Z"], observation_type="RootState", on_inspect=[record_shape, record_dtype]
@@ -701,3 +705,27 @@ def current_time_s(env: ManagerBasedRLEnv) -> torch.Tensor:
 def remaining_time_s(env: ManagerBasedRLEnv) -> torch.Tensor:
     """The maximum time remaining in the episode (in seconds)."""
     return env.max_episode_length_s - env.episode_length_buf.unsqueeze(1) * env.step_dt
+
+
+def base_lin_acc_from_vel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Root linear acceleration computed from velocity differences (like IMU)."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    # Get current and previous velocities
+    if not hasattr(env, '_prev_root_lin_vel_b'):
+        env._prev_root_lin_vel_b = asset.data.root_lin_vel_b.clone()
+    # Compute acceleration from velocity difference
+    lin_acc_b = (asset.data.root_lin_vel_b - env._prev_root_lin_vel_b) / env.step_dt
+    env._prev_root_lin_vel_b = asset.data.root_lin_vel_b.clone()
+    return lin_acc_b
+
+
+def base_ang_acc_from_vel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Root angular acceleration computed from velocity differences (like IMU)."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    # Get current and previous velocities
+    if not hasattr(env, '_prev_root_ang_vel_b'):
+        env._prev_root_ang_vel_b = asset.data.root_ang_vel_b.clone()
+    # Compute acceleration from velocity difference
+    ang_acc_b = (asset.data.root_ang_vel_b - env._prev_root_ang_vel_b) / env.step_dt
+    env._prev_root_ang_vel_b = asset.data.root_ang_vel_b.clone()
+    return ang_acc_b

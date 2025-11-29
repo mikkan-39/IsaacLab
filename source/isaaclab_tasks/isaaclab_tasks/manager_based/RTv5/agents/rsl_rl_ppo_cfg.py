@@ -9,11 +9,14 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     max_iterations = 3000
     save_interval = 50
     experiment_name = "RTv5_rough"
-    empirical_normalization = True
+    # empirical_normalization = True
+    obs_groups = {"policy": ["policy"], "critic": ["policy"]}
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         # actor_hidden_dims=[150, 75, 30],
         # critic_hidden_dims=[150, 75, 30],
+        actor_obs_normalization=False,
+        critic_obs_normalization=False, 
         actor_hidden_dims=[512, 256, 128],
         critic_hidden_dims=[512, 256, 128],
         activation="elu",
