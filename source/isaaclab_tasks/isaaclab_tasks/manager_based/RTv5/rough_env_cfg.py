@@ -19,12 +19,12 @@ class RTv5Rewards:
     track_lin_vel = RewTerm(
         func=mdp.track_lin_vel_xy_yaw_frame_exp,
         weight=1.0, 
-        params={"command_name": "base_velocity", "std": 0.15},
+        params={"command_name": "base_velocity", "std": 0.25},
     )
     track_ang_vel = RewTerm(
         func=mdp.track_ang_vel_z_world_exp, 
         weight=2.0, 
-        params={"command_name": "base_velocity", "std": 0.15}
+        params={"command_name": "base_velocity", "std": 0.25}
     )
 
    
@@ -128,7 +128,7 @@ class RTv5Rewards:
 
     joint_deviation_hip_rotate = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-0.001,
+        weight=-0.1,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_revolute"])},
     )
 
@@ -138,14 +138,27 @@ class RTv5Rewards:
     #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*to_Tibia.*"])},
     # )
 
-    joint_deviation_feet = RewTerm(
+    joint_deviation_feet_main = RewTerm(
         func=mdp.joint_deviation_l1,
         weight=-0.1,
         params={
             "asset_cfg": SceneEntityCfg(
                 "robot", 
                 joint_names=[
-                    ".*FootJoint.*",
+                    ".*to_FootJoint.*",
+                ]
+            )
+        },
+    )
+
+    joint_deviation_feet_secondary = RewTerm(
+        func=mdp.joint_deviation_l1,
+        weight=-0.3,
+        params={
+            "asset_cfg": SceneEntityCfg(
+                "robot", 
+                joint_names=[
+                    "FootJoint.*",
                 ]
             )
         },
