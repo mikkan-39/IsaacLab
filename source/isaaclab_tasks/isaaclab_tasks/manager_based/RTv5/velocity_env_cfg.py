@@ -16,7 +16,8 @@ from isaaclab.sensors import ContactSensorCfg, RayCasterCfg, patterns, ImuCfg
 from isaaclab.terrains import TerrainImporterCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, ISAACLAB_NUCLEUS_DIR, NVIDIA_NUCLEUS_DIR
-from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise
+from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise, GaussianNoiseCfg
+from isaaclab.utils.modifiers import DelayedObservationCfg
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 
@@ -113,7 +114,7 @@ class CommandsCfg:
         heading_command=False,
         debug_vis=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 1.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0)
+            lin_vel_x=(0.0, 0.5), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0)
         ),
     )
 
@@ -139,17 +140,46 @@ class ObservationsCfg:
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
 
+                # Accelerometer with gravity (like real IMU)
         base_lin_acc = ObsTerm(
-            func=mdp.base_lin_acc_from_vel,  # Linear acceleration from LIS331DLH accelerometer
-            noise=Unoise(n_min=-0.1, n_max=0.1)
+            func=mdp.base_lin_acc_with_gravity,
+            noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"),
+            params={"gravity_bias": (0.0, 0.0, 9.81)},
+            modifiers=[
+                DelayedObservationCfg(
+                    min_lag=0,
+                    max_lag=3,
+                    per_env=True,
+                    hold_prob=0.9,
+                    update_period=1,
+                )
+            ],
         )
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
-            noise=Unoise(n_min=-0.05, n_max=0.05)
+            noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"),
+            modifiers=[
+                DelayedObservationCfg(
+                    min_lag=0,
+                    max_lag=3,
+                    per_env=True,
+                    hold_prob=0.9,
+                    update_period=1,
+                )
+            ],
         )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
-            noise=Unoise(n_min=-0.05, n_max=0.05),
+            noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"),
+            modifiers=[
+                DelayedObservationCfg(
+                    min_lag=0,
+                    max_lag=3,
+                    per_env=True,
+                    hold_prob=0.9,
+                    update_period=1,
+                )
+            ],
         )
         velocity_commands = ObsTerm(
             func=mdp.generated_commands, 
@@ -157,19 +187,55 @@ class ObservationsCfg:
         )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel, 
-            noise=Unoise(n_min=-0.01, n_max=0.01), 
+            noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
             params={"asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[controllableJointsRegex]
             )}
         )
-        joint_vel = ObsTerm(
-            func=mdp.joint_vel_rel, 
-            noise=Unoise(n_min=-0.2, n_max=0.2), 
+        joint_pos_t1 = ObsTerm(
+            func=mdp.joint_pos_rel, 
+            noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
             params={"asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[controllableJointsRegex]
-            )}
+            )},
+            modifiers=[DelayedObservationCfg(
+                min_lag=1, 
+                max_lag=1, 
+                per_env=False,
+                update_period=0)],
         )
+        # joint_vel = ObsTerm(
+        #     func=mdp.joint_vel_rel, 
+        #     noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"), 
+        #     params={"asset_cfg": SceneEntityCfg(
+        #         "robot", joint_names=[controllableJointsRegex]
+        #     )}
+        # )
         actions = ObsTerm(func=mdp.last_action)
+        action_t1 = ObsTerm(
+            func=mdp.last_action,
+            modifiers=[DelayedObservationCfg(
+                min_lag=1, 
+                max_lag=1, 
+                per_env=False,
+                update_period=0)],
+        )
+        action_t2 = ObsTerm(
+            func=mdp.last_action,
+            modifiers=[DelayedObservationCfg(
+                min_lag=2, 
+                max_lag=2, 
+                per_env=False,
+                update_period=0)],
+        )
+        action_t3 = ObsTerm(
+            func=mdp.last_action,
+            modifiers=[DelayedObservationCfg(
+                min_lag=3, 
+                max_lag=3, 
+                per_env=False,
+                update_period=0)],
+        )
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -191,7 +257,7 @@ class EventCfg:
             "asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[controllableJointsRegex]
             ),
-            "position_range": (0.0, 0.0),
+            "position_range": (-0.2, 0.2),
             "velocity_range": (0.0, 0.0),
         },
     )
@@ -200,49 +266,69 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (0.0, 0.0)},
+            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5),"yaw": (0.0, 0.0)},
             "velocity_range": {
                 "x": (-0.0, 0.0),
                 "y": (-0.0, 0.0),
                 "z": (-0.0, 0.0),
-                "roll": (-0.0, 0.0),
-                "pitch": (-0.0, 0.0),
-                "yaw": (-0.0, 0.0),
+                "roll": (-0.0, -0.0),
+                "pitch": (-0.0, -0.0),
+                "yaw": (-0.0, -0.0),
             },
         },
     )
 
     
-    # add_base_mass = EventTerm(
-    #     func=mdp.randomize_rigid_body_mass,
-    #     mode="startup",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
-    #         "mass_distribution_params": (0.75, 1.25),
-    #         "operation": "scale",
-    #     },
-    # )
+    add_base_mass = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
+            "mass_distribution_params": (0.75, 1.25),
+            "operation": "scale",
+        },
+    )
 
-    # push_robot = EventTerm(
-    #     func=mdp.push_by_setting_velocity,
-    #     mode="interval",
-    #     interval_range_s=(1.0, 1.0),
-    #     params={"velocity_range": {"x": (-0.3, 0.3), "y": (-0.3, 0.3)}},
+    push_robot = EventTerm(
+        func=mdp.push_by_setting_velocity,
+        mode="interval",
+        interval_range_s=(1.0, 10.0),
+        params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)}},
         
-    # )
+    )
 
-    # robot_joint_stiffness_and_damping = EventTerm(
-    #     func=mdp.randomize_actuator_gains,
-    #     min_step_count_between_reset=720,
+    robot_joint_stiffness_and_damping = EventTerm(
+        func=mdp.randomize_actuator_gains,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+            "stiffness_distribution_params": (4.0, 6.0),
+            "damping_distribution_params": (1.0, 3.0),
+            "operation": "abs",
+            "distribution": "uniform",
+        },
+    )
+
+    # robot_joint_friction = EventTerm(
+    #     func=mdp.randomize_joint_parameters,
     #     mode="reset",
     #     params={
     #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-    #         "stiffness_distribution_params": (1.0, 30.0),
-    #         # "damping_distribution_params": (0.25, 0.5),
+    #         "friction_distribution_params": (0.1, 0.3),
     #         "operation": "abs",
     #         "distribution": "uniform",
     #     },
     # )
+
+    # robot_velocity_limit = EventTerm(
+    #     func=randomize_actuator_velocity_limit,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+    #         "velocity_range": (5.24, 11.1),
+    #     },
+    # )
+
 
 
 @configclass
@@ -312,7 +398,8 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
         # if self.scene.height_scanner is not None:
         #     self.scene.height_scanner.update_period = self.decimation * self.sim.dt
 
-        self.viewer.eye = (1.0, 1.0, 0.3)  # Camera position (x, y, z)
+        self.viewer.eye = (0.3, 1.4, 0.2)  # Camera position (x, y, z)
+        self.viewer.env_index = 14
         # self.viewer.origin_type = "robot" 
         self.viewer.origin_type = "asset_root"  # Track the robot's root
         self.viewer.asset_name = "robot"  # Asset to track

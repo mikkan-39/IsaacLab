@@ -13,7 +13,7 @@ MINI_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
     horizontal_scale=0.1,
     vertical_scale=0.005,
     slope_threshold=0.75,
-    use_cache=True,
+    use_cache=False,
     sub_terrains={
         # "pyramid_stairs": terrain_gen.MeshPyramidStairsTerrainCfg(
         #     proportion=0.2,
@@ -41,10 +41,11 @@ MINI_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
         #     noise_range=(0.0, 0.02), noise_step=0.01, border_width=0.25, horizontal_scale=1.0
         # ),
         "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
-            slope_range=(0.0, 0.20), platform_width=1.0, border_width=0.25
+            slope_range=(0.0, 0.10), platform_width=1.0, border_width=0.25
         ),
+        
         "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
-            slope_range=(0.0, 0.20), platform_width=1.0, border_width=0.25
+            slope_range=(0.0, 0.10), platform_width=1.0, border_width=0.25
         ),
     },
 )

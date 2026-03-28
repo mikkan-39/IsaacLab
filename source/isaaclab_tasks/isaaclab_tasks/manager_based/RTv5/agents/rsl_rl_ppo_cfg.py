@@ -26,7 +26,6 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         use_clipped_value_loss=True,
         clip_param=0.2,
         entropy_coef=0.008,
-        # entropy_coef=0.002,
         num_learning_epochs=10,
         num_mini_batches=8,
         # learning_rate=1.0e-4,
@@ -44,3 +43,20 @@ class RTv5FlatPPORunnerCfg(RTv5RoughPPORunnerCfg):
     def __post_init__(self):
         super().__post_init__() # type: ignore
         self.experiment_name = "RTv5_flat"
+
+
+
+@configclass
+class RTv5TestPPORunnerCfg(RTv5RoughPPORunnerCfg):
+    def __post_init__(self):
+        super().__post_init__() # type: ignore
+        self.experiment_name = "RTv5_test"
+        # self.policy.init_noise_std = 0.001
+        self.policy = RslRlPpoActorCriticCfg(
+            init_noise_std=1.0,
+            actor_obs_normalization=False,
+            critic_obs_normalization=False, 
+            actor_hidden_dims=[14],
+            critic_hidden_dims=[14],
+            activation="elu",
+        )

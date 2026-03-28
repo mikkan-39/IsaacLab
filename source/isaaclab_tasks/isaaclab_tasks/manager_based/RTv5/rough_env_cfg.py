@@ -18,7 +18,7 @@ class RTv5Rewards:
 
     track_lin_vel = RewTerm(
         func=mdp.track_lin_vel_xy_yaw_frame_exp,
-        weight=1.0, 
+        weight=2.0, 
         params={"command_name": "base_velocity", "std": 0.25},
     )
     track_ang_vel = RewTerm(

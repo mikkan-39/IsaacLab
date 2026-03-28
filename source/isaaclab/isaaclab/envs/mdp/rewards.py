@@ -161,6 +161,8 @@ def joint_torques_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEn
     asset: Articulation = env.scene[asset_cfg.name]
     return torch.sum(torch.square(asset.data.applied_torque[:, asset_cfg.joint_ids]), dim=1)
 
+
+
 def joint_torques(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Penalize joint torques applied on the articulation using L2 squared kernel.
 
@@ -727,3 +729,19 @@ def two_joint_deviation_penalty(
     reward = torch.abs(abs_dev_1 - abs_dev_2)
 
     return reward
+
+def track_joint_pos_l1(
+    env,
+    command_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    asset: Articulation = env.scene[asset_cfg.name]
+
+    # target from your sine command
+    target = env.command_manager.get_command(command_name)  # (N, 1)
+
+    # current joint
+    joint_pos = asset.data.joint_pos[:, asset_cfg.joint_ids]  # (N, 1)
+
+    error = joint_pos - target
+    return -torch.sum(torch.abs(error), dim=1)

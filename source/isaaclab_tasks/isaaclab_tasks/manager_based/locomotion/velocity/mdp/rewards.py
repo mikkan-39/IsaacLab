@@ -23,6 +23,30 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnv
 
 
+def track_joint_pos_l1(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Track commanded joint target using joint position relative to default pose.
+
+    Using relative joint position keeps the reward consistent with:
+    - `joint_pos_rel` observations
+    - `JointPositionActionCfg(..., use_default_offset=True)`
+    """
+    asset = env.scene[asset_cfg.name]
+
+    # Command from SineJointCommand: shape (num_envs, 1) for this setup.
+    target = env.command_manager.get_command(command_name)
+
+    # Compare in the same coordinate frame as observations/actions (relative to default pose).
+    joint_pos_rel = asset.data.joint_pos[:, asset_cfg.joint_ids] - asset.data.default_joint_pos[:, asset_cfg.joint_ids]
+
+    # Mean absolute error keeps scale stable if joint count changes later.
+    error = joint_pos_rel - target
+    return -torch.mean(torch.abs(error), dim=1)
+
+
 def feet_air_time(
     env: ManagerBasedRLEnv, command_name: str, sensor_cfg: SceneEntityCfg, threshold: float
 ) -> torch.Tensor:
@@ -114,3 +138,71 @@ def stand_still_joint_deviation_l1(
     command = env.command_manager.get_command(command_name)
     # Penalize motion when command is nearly zero.
     return mdp.joint_deviation_l1(env, asset_cfg) * (torch.norm(command[:, :2], dim=1) < command_threshold)
+
+
+def action_clip_violation(
+    env: ManagerBasedRLEnv, clip_min: float = -1.0, clip_max: float = 1.0
+) -> torch.Tensor:
+    """Penalize actions that exceed the clip bounds.
+
+    This function penalizes the policy for outputting actions outside the clipping range.
+    Since actions are clipped before being applied, the policy doesn't inherently learn
+    to stay within bounds. This penalty encourages bounded outputs.
+
+    The penalty is computed as the sum of squared violations for each action dimension.
+    """
+    # Get raw actions from all action terms (before clipping/processing)
+    raw_actions_list = []
+    for term in env.action_manager._terms.values():
+        if hasattr(term, 'raw_actions'):
+            raw_actions_list.append(term.raw_actions)
+    
+    if not raw_actions_list:
+        return torch.zeros(env.num_envs, device=env.device)
+    
+    raw_actions = torch.cat(raw_actions_list, dim=1)
+    
+    # Compute violation: amount by which actions exceed bounds
+    lower_violation = torch.clamp(clip_min - raw_actions, min=0.0)  # Positive if below min
+    upper_violation = torch.clamp(raw_actions - clip_max, min=0.0)  # Positive if above max
+    
+    # Sum of squared violations
+    violation = torch.sum(torch.square(lower_violation) + torch.square(upper_violation), dim=1)
+    
+    return violation
+
+
+def action_magnitude_l1(
+    env: ManagerBasedRLEnv, action_ids: list[int] | None = None
+) -> torch.Tensor:
+    """Return L1 norm of actions for specified action indices.
+    
+    Args:
+        env: The environment.
+        action_ids: List of action indices to include. If None, uses all actions.
+    
+    Returns:
+        Sum of absolute action values for specified indices. Shape: (num_envs,)
+    """
+    actions = env.action_manager.action
+    if action_ids is not None:
+        actions = actions[:, action_ids]
+    return torch.sum(torch.abs(actions), dim=1)
+
+
+def action_magnitude_l2(
+    env: ManagerBasedRLEnv, action_ids: list[int] | None = None
+) -> torch.Tensor:
+    """Return L2 norm squared of actions for specified action indices.
+    
+    Args:
+        env: The environment.
+        action_ids: List of action indices to include. If None, uses all actions.
+    
+    Returns:
+        Sum of squared action values for specified indices. Shape: (num_envs,)
+    """
+    actions = env.action_manager.action
+    if action_ids is not None:
+        actions = actions[:, action_ids]
+    return torch.sum(torch.square(actions), dim=1)

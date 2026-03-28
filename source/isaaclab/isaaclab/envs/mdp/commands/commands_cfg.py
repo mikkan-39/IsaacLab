@@ -13,7 +13,7 @@ from isaaclab.utils import configclass
 
 from .null_command import NullCommand
 from .pose_2d_command import TerrainBasedPose2dCommand, UniformPose2dCommand
-from .pose_command import UniformPoseCommand
+from .pose_command import UniformPoseCommand, SineJointCommand
 from .velocity_command import NormalVelocityCommand, UniformVelocityCommand
 
 
@@ -246,3 +246,23 @@ class TerrainBasedPose2dCommandCfg(UniformPose2dCommandCfg):
 
     ranges: Ranges = MISSING
     """Distribution ranges for the sampled commands."""
+
+@configclass
+class SineJointCommandCfg(CommandTermCfg):
+    """Configuration for a per-env randomized sine joint command.
+
+    Amplitude and frequency are sampled uniformly from their ranges for each
+    environment on every resample. Set both ends of a range to the same value
+    for a fixed parameter.
+    """
+
+    class_type: type = SineJointCommand
+
+    amplitude_range: tuple[float, float] = (0.3, 0.7)
+    """Range for the sine amplitude (uniform per-env)."""
+
+    frequency_range: tuple[float, float] = (0.3, 0.8)
+    """Range for the sine frequency in Hz (uniform per-env)."""
+
+    offset: float = 0.0
+    """Constant offset added to the sine wave."""

@@ -17,9 +17,9 @@ from isaaclab.markers import VisualizationMarkers
 from isaaclab.utils.math import combine_frame_transforms, compute_pose_error, quat_from_euler_xyz, quat_unique
 
 if TYPE_CHECKING:
-    from isaaclab.envs import ManagerBasedEnv
+    from isaaclab.envs import ManagerBasedRLEnv
 
-    from .commands_cfg import UniformPoseCommandCfg
+    from .commands_cfg import UniformPoseCommandCfg, SineJointCommandCfg
 
 
 class UniformPoseCommand(CommandTerm):
@@ -44,7 +44,7 @@ class UniformPoseCommand(CommandTerm):
     cfg: UniformPoseCommandCfg
     """Configuration for the command generator."""
 
-    def __init__(self, cfg: UniformPoseCommandCfg, env: ManagerBasedEnv):
+    def __init__(self, cfg: UniformPoseCommandCfg, env: ManagerBasedRLEnv):
         """Initialize the command generator class.
 
         Args:
@@ -153,3 +153,49 @@ class UniformPoseCommand(CommandTerm):
         # -- current body pose
         body_link_pose_w = self.robot.data.body_link_pose_w[:, self.body_idx]
         self.current_pose_visualizer.visualize(body_link_pose_w[:, :3], body_link_pose_w[:, 3:7])
+
+class SineJointCommand(CommandTerm):
+    """Generates a per-env randomized sine wave joint position command.
+
+    Amplitude and frequency are sampled uniformly from their configured ranges
+    for each environment whenever ``_resample_command`` is called (on reset or
+    after the resampling timer expires).
+    """
+
+    cfg: SineJointCommandCfg
+
+    def __str__(self) -> str:
+        msg = "SineJointCommand:\n"
+        msg += f"\tCommand dimension: {tuple(self.command.shape[1:])}\n"
+        msg += f"\tResampling time range: {self.cfg.resampling_time_range}\n"
+        msg += f"\tAmplitude range: {self.cfg.amplitude_range}\n"
+        msg += f"\tFrequency range: {self.cfg.frequency_range}\n"
+        msg += f"\tOffset: {self.cfg.offset}"
+        return msg
+
+    def __init__(self, cfg: SineJointCommandCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
+
+        self.t = torch.zeros(self.num_envs, device=self.device)
+        self._amplitude = torch.zeros(self.num_envs, device=self.device)
+        self._frequency = torch.zeros(self.num_envs, device=self.device)
+        self._command = torch.zeros((self.num_envs, 1), device=self.device)
+
+    @property
+    def command(self) -> torch.Tensor:
+        return self._command
+
+    def _update_metrics(self):
+        pass
+
+    def _resample_command(self, env_ids: Sequence[int]):
+        self.t[env_ids] = 0.0
+        n = self.num_envs if isinstance(env_ids, slice) else len(env_ids)
+        self._amplitude[env_ids] = torch.empty(n, device=self.device).uniform_(*self.cfg.amplitude_range)
+        self._frequency[env_ids] = torch.empty(n, device=self.device).uniform_(*self.cfg.frequency_range)
+
+    def _update_command(self):
+        self.t += self._env.step_dt
+        self._command[:, 0] = self._amplitude * torch.sin(
+            2 * torch.pi * self._frequency * self.t
+        ) + self.cfg.offset

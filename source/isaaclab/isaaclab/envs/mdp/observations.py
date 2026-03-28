@@ -719,6 +719,33 @@ def base_lin_acc_from_vel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = Scen
     return lin_acc_b
 
 
+def base_lin_acc_with_gravity(
+    env: ManagerBasedEnv, 
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    gravity_bias: tuple[float, float, float] = (0.0, 0.0, 9.81)
+) -> torch.Tensor:
+    """Root linear acceleration with gravity bias (like real IMU accelerometer).
+    
+    Real accelerometers measure the reaction force to gravity, so a stationary
+    upright robot reads ~[0, 0, +9.81]. This function adds that gravity bias
+    to the velocity-derived acceleration in the body frame.
+    """
+    asset: RigidObject = env.scene[asset_cfg.name]
+    # Get current and previous velocities
+    if not hasattr(env, '_prev_root_lin_vel_b_grav'):
+        env._prev_root_lin_vel_b_grav = asset.data.root_lin_vel_b.clone()
+    # Compute acceleration from velocity difference
+    lin_acc_b = (asset.data.root_lin_vel_b - env._prev_root_lin_vel_b_grav) / env.step_dt
+    env._prev_root_lin_vel_b_grav = asset.data.root_lin_vel_b.clone()
+    
+    # Add gravity bias in world frame, then rotate to body frame
+    gravity_w = torch.tensor([gravity_bias], device=lin_acc_b.device, dtype=lin_acc_b.dtype)
+    gravity_w = gravity_w.expand(env.num_envs, 3)
+    gravity_b = math_utils.quat_apply_inverse(asset.data.root_quat_w, gravity_w)
+    
+    return lin_acc_b + gravity_b
+
+
 def base_ang_acc_from_vel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Root angular acceleration computed from velocity differences (like IMU)."""
     asset: RigidObject = env.scene[asset_cfg.name]
