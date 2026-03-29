@@ -65,7 +65,7 @@ def feet_air_time(
     last_air_time = contact_sensor.data.last_air_time[:, sensor_cfg.body_ids]
     reward = torch.sum((last_air_time - threshold) * first_contact, dim=1)
     # no reward for zero command
-    reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
+    reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.05
     return reward
 
 
@@ -87,7 +87,7 @@ def feet_air_time_positive_biped(env, command_name: str, threshold: float, senso
     reward = torch.min(torch.where(single_stance.unsqueeze(-1), in_mode_time, 0.0), dim=1)[0]
     reward = torch.clamp(reward, max=threshold)
     # no reward for zero command
-    reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
+    reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.05
     return reward
 
 
@@ -206,3 +206,66 @@ def action_magnitude_l2(
     if action_ids is not None:
         actions = actions[:, action_ids]
     return torch.sum(torch.square(actions), dim=1)
+
+
+def feet_step_distance(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    sensor_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Reward feet for covering horizontal distance during the swing phase.
+
+    Records each foot's world-frame XY position at liftoff. When the foot
+    lands again, rewards the horizontal distance traveled. This directly
+    incentivizes longer steps: shuffling barely moves the foot, proper
+    walking swings it far.
+    """
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    asset = env.scene[asset_cfg.name]
+
+    first_air = contact_sensor.compute_first_air(env.step_dt)[:, sensor_cfg.body_ids]
+    first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, sensor_cfg.body_ids]
+    foot_pos_xy = asset.data.body_pos_w[:, asset_cfg.body_ids, :2]
+
+    buf_key = "_feet_liftoff_pos"
+    if not hasattr(env, buf_key):
+        setattr(env, buf_key, foot_pos_xy.clone())
+    liftoff_buf: torch.Tensor = getattr(env, buf_key)
+
+    liftoff_buf[first_air] = foot_pos_xy[first_air]
+
+    step_dist = torch.norm(foot_pos_xy - liftoff_buf, dim=-1)
+    reward = torch.sum(step_dist.square() * first_contact.float(), dim=1)
+
+    reward *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.05
+
+    # update per-foot last step distance (used by feet_step_symmetry)
+    dist_key = "_last_step_dist"
+    if not hasattr(env, dist_key):
+        setattr(env, dist_key, torch.zeros_like(step_dist))
+    last_dist: torch.Tensor = getattr(env, dist_key)
+    last_dist[first_contact] = step_dist[first_contact]
+
+    return reward
+
+
+def feet_step_symmetry(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    sensor_cfg: SceneEntityCfg,
+) -> torch.Tensor:
+    """Penalize asymmetric step distances between left and right feet.
+
+    Uses the per-foot last step distances tracked by ``feet_step_distance``.
+    Returns the absolute difference — a larger value means more asymmetry.
+    Must be used with a negative weight.
+
+    Requires ``feet_step_distance`` to be active in the same reward config.
+    """
+    if not hasattr(env, "_last_step_dist"):
+        return torch.zeros(env.num_envs, device=env.device)
+    last_dist: torch.Tensor = getattr(env, "_last_step_dist")
+    penalty = torch.abs(last_dist[:, 0] - last_dist[:, 1])
+    penalty *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
+    return penalty

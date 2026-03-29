@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import isaaclab.sim as sim_utils
-from isaaclab.actuators import ImplicitActuatorCfg
+from isaaclab.actuators import DCMotorCfg, ImplicitActuatorCfg
+from isaaclab_assets.actuators import BacklashDCMotorCfg
 from isaaclab.assets import ArticulationCfg
 
 ##
@@ -43,38 +44,49 @@ RT_CFG = ArticulationCfg(
     ),
     soft_joint_pos_limit_factor=0.9,
     actuators={
-        "ST3215-HS": ImplicitActuatorCfg(
-            joint_names_expr=[
-                # ".*",
-                "^(?!.*FootJoint).*",
-            ],
-            effort_limit_sim=2.0,  # Same as effort_limit
-            velocity_limit_sim=5.0,  # 106 RPM = 11.1 rad/s (rounded down, in rad/s)
-            stiffness={
-                ".*": 12.0  # PD controller stiffness (dimensionless, tuned for stability)
-            },
-            damping={
-                ".*": 2.5  # PD controller damping (dimensionless, tuned for stability)
-            },
-            armature={
-                ".*": 0.01  # Motor armature (kg·m², typical for small motors)
-            },
-        ),
-        "ST3215-HS-Feet": ImplicitActuatorCfg(
-            joint_names_expr=[
-                ".*FootJoint.*"
-            ],
-            effort_limit_sim=2.0,  # Same as effort_limit
-            velocity_limit_sim=5.0,  # 106 RPM = 11.1 rad/s (rounded down, in rad/s)
-            stiffness={
-                ".*": 12.0  # PD controller stiffness (dimensionless, tuned for stability)
-            },
-            damping={
-                ".*": 2.5  # PD controller damping (dimensionless, tuned for stability)
-            },
-            armature={
-                ".*": 0.01  # Motor armature (kg·m², typical for small motors)
-            },
+        # "ST3215-HS": ImplicitActuatorCfg(
+        #     joint_names_expr=[
+        #         ".*",
+        #     ],
+        #     effort_limit_sim=2.0,  # Same as effort_limit
+        #     velocity_limit_sim=5.0,  # 106 RPM = 11.1 rad/s (rounded down, in rad/s)
+        #     stiffness={
+        #         ".*": 12.0  # PD controller stiffness (dimensionless, tuned for stability)
+        #     },
+        #     damping={
+        #         ".*": 2.5  # PD controller damping (dimensionless, tuned for stability)
+        #     },
+        #     armature={
+        #         ".*": 0.01  # Motor armature (kg·m², typical for small motors)
+        #     },
+        # ),
+
+        # "ST3215-HS": BacklashDCMotorCfg(
+        #     joint_names_expr=[".*"],
+        #     saturation_effort=1.96,
+        #     effort_limit=1.96,
+        #     effort_limit_sim=1.96,
+        #     velocity_limit=4.78,
+        #     velocity_limit_sim=4.78,
+        #     stiffness=40.0,
+        #     damping=0.65,
+        #     armature=0.08,
+        #     min_delay=0,
+        #     max_delay=0,
+        #     backlash_rad=0.0,
+        #     noise_std=0.0,
+        # ),
+
+        "ST3215-HS": DCMotorCfg(
+            joint_names_expr=[".*"],
+            stiffness=12.0,
+            damping=2.5,
+            armature=0.01,
+            saturation_effort=1.96,
+            effort_limit=1.96,
+            effort_limit_sim=1.96,
+            velocity_limit=11.1,
+            velocity_limit_sim=11.1,
         ),
     },
 )

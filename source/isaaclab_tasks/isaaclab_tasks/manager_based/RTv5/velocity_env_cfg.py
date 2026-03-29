@@ -114,7 +114,7 @@ class CommandsCfg:
         heading_command=False,
         debug_vis=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 0.5), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0)
+            lin_vel_x=(0.0, 0.5), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.0, 0.0)
         ),
     )
 
@@ -128,7 +128,7 @@ class ActionsCfg:
                                            scale=1.0, 
                                            use_default_offset=True,
                                            preserve_order=True,
-                                           clip={".*": (-1.0, 1.0)}
+                                        #    clip={".*": (-1.0, 1.0)}
                                            )
 
 
@@ -145,41 +145,41 @@ class ObservationsCfg:
             func=mdp.base_lin_acc_with_gravity,
             noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"),
             params={"gravity_bias": (0.0, 0.0, 9.81)},
-            modifiers=[
-                DelayedObservationCfg(
-                    min_lag=0,
-                    max_lag=3,
-                    per_env=True,
-                    hold_prob=0.9,
-                    update_period=1,
-                )
-            ],
+            # modifiers=[
+            #     DelayedObservationCfg(
+            #         min_lag=0,
+            #         max_lag=3,
+            #         per_env=True,
+            #         hold_prob=0.9,
+            #         update_period=1,
+            #     )
+            # ],
         )
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
             noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"),
-            modifiers=[
-                DelayedObservationCfg(
-                    min_lag=0,
-                    max_lag=3,
-                    per_env=True,
-                    hold_prob=0.9,
-                    update_period=1,
-                )
-            ],
+            # modifiers=[
+            #     DelayedObservationCfg(
+            #         min_lag=0,
+            #         max_lag=3,
+            #         per_env=True,
+            #         hold_prob=0.9,
+            #         update_period=1,
+            #     )
+            # ],
         )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
             noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"),
-            modifiers=[
-                DelayedObservationCfg(
-                    min_lag=0,
-                    max_lag=3,
-                    per_env=True,
-                    hold_prob=0.9,
-                    update_period=1,
-                )
-            ],
+            # modifiers=[
+            #     DelayedObservationCfg(
+            #         min_lag=0,
+            #         max_lag=3,
+            #         per_env=True,
+            #         hold_prob=0.9,
+            #         update_period=1,
+            #     )
+            # ],
         )
         velocity_commands = ObsTerm(
             func=mdp.generated_commands, 
@@ -190,7 +190,16 @@ class ObservationsCfg:
             noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
             params={"asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[controllableJointsRegex]
-            )}
+            )},
+            # modifiers=[
+            #     DelayedObservationCfg(
+            #         min_lag=0,
+            #         max_lag=3,
+            #         per_env=True,
+            #         hold_prob=0.9,
+            #         update_period=1,
+            #     )
+            # ],
         )
         joint_pos_t1 = ObsTerm(
             func=mdp.joint_pos_rel, 
@@ -284,30 +293,30 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
-            "mass_distribution_params": (0.75, 1.25),
+            "mass_distribution_params": (0.85, 1.15),
             "operation": "scale",
         },
     )
 
-    push_robot = EventTerm(
-        func=mdp.push_by_setting_velocity,
-        mode="interval",
-        interval_range_s=(1.0, 10.0),
-        params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)}},
+    # push_robot = EventTerm(
+    #     func=mdp.push_by_setting_velocity,
+    #     mode="interval",
+    #     interval_range_s=(1.0, 10.0),
+    #     params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)}},
         
-    )
+    # )
 
-    robot_joint_stiffness_and_damping = EventTerm(
-        func=mdp.randomize_actuator_gains,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-            "stiffness_distribution_params": (4.0, 6.0),
-            "damping_distribution_params": (1.0, 3.0),
-            "operation": "abs",
-            "distribution": "uniform",
-        },
-    )
+    # robot_joint_stiffness_and_damping = EventTerm(
+    #     func=mdp.randomize_actuator_gains,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+    #         "stiffness_distribution_params": (0.75, 1.25),
+    #         "damping_distribution_params": (0.75, 1.25),
+    #         "operation": "scale",
+    #         "distribution": "uniform",
+    #     },
+    # )
 
     # robot_joint_friction = EventTerm(
     #     func=mdp.randomize_joint_parameters,
@@ -356,10 +365,81 @@ class TerminationsCfg:
 
 
 
+def adaptive_reward_ramp(
+    env,
+    env_ids,
+    term_names: list[str],
+    command_name: str = "base_velocity",
+    min_scale: float = 0.1,
+    max_scale: float = 1.0,
+    increase_threshold: float = 0.12,
+    decrease_threshold: float = 0.25,
+    step_size: float = 0.02,
+    smoothing: float = 0.99,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> dict[str, float]:
+    """Curriculum that adapts reward weights based on velocity tracking quality.
+
+    Tracks an EMA of XY velocity error. When error drops below
+    ``increase_threshold`` (good tracking), scale increases. When it rises
+    above ``decrease_threshold`` (struggling), scale decreases. This lets the
+    policy first learn to walk, then get progressively pressured toward
+    better step quality.
+
+    Base weights are captured on first call; scaling is always relative
+    to those original values.
+    """
+    import torch
+    from isaaclab.utils.math import quat_apply_inverse, yaw_quat
+
+    if not hasattr(env, "_adapt_base_weights"):
+        base = {}
+        for name, cfg in zip(env.reward_manager._term_names, env.reward_manager._term_cfgs):
+            if name in term_names:
+                base[name] = cfg.weight
+        env._adapt_base_weights = base
+        env._adapt_scale = min_scale
+        env._adapt_vel_error_ema = 0.3
+
+    asset = env.scene[asset_cfg.name]
+    cmd = env.command_manager.get_command(command_name)
+    vel_yaw = quat_apply_inverse(yaw_quat(asset.data.root_quat_w), asset.data.root_lin_vel_w[:, :3])
+    vel_error = torch.norm(cmd[:, :2] - vel_yaw[:, :2], dim=1).mean().item()
+
+    env._adapt_vel_error_ema = smoothing * env._adapt_vel_error_ema + (1 - smoothing) * vel_error
+
+    ema = env._adapt_vel_error_ema
+    if ema < increase_threshold:
+        env._adapt_scale = min(env._adapt_scale + step_size, max_scale)
+    elif ema > decrease_threshold:
+        env._adapt_scale = max(env._adapt_scale - step_size, min_scale)
+
+    scale = env._adapt_scale
+    for name, cfg in zip(env.reward_manager._term_names, env.reward_manager._term_cfgs):
+        if name in env._adapt_base_weights:
+            cfg.weight = env._adapt_base_weights[name] * scale
+
+    return {"step_reward_scale": scale, "vel_error_ema": ema}
+
+
 @configclass
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
     terrain_levels = CurrTerm(func=mdp.terrain_levels_vel) # type: ignore
+
+    # step_reward_ramp = CurrTerm(
+    #     func=adaptive_reward_ramp,
+    #     params={
+    #         "term_names": ["step_distance", "step_symmetry"],
+    #         "command_name": "base_velocity",
+    #         "min_scale": 1.0,
+    #         "max_scale": 10.0,
+    #         "increase_threshold": 0.12,
+    #         "decrease_threshold": 0.25,
+    #         "step_size": 0.02,
+    #         "smoothing": 0.99,
+    #     },
+    # )
 
 
 @configclass
@@ -381,11 +461,11 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         """Post initialization."""
         # general settings
-        self.decimation = 1
+        self.decimation = 4
         self.episode_length_s = 15.0
         # simulation settings
-        self.sim.dt = 1 / 50
-        self.sim.render_interval = 1
+        self.sim.dt = 1 / 200
+        self.sim.render_interval = 4
         self.sim.physics_material = self.scene.terrain.physics_material
         self.sim.device = "cuda:0"
         self.sim.enable_scene_query_support = False
