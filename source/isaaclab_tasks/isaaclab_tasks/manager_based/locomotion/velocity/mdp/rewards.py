@@ -254,18 +254,137 @@ def feet_step_symmetry(
     env: ManagerBasedRLEnv,
     command_name: str,
     sensor_cfg: SceneEntityCfg,
+    ang_vel_threshold: float = 0.2,
 ) -> torch.Tensor:
-    """Penalize asymmetric step distances between left and right feet.
+    """Penalize asymmetric step distances between left and right feet, but only when moving straight.
 
     Uses the per-foot last step distances tracked by ``feet_step_distance``.
     Returns the absolute difference — a larger value means more asymmetry.
     Must be used with a negative weight.
 
+    Penalizes asymmetry only when:
+    - The robot is commanded to move forward (lin_vel > 0.1)
+    - The robot is moving relatively straight (ang_vel < ang_vel_threshold)
+
+    When turning (ang_vel >= ang_vel_threshold), asymmetry is allowed.
+
     Requires ``feet_step_distance`` to be active in the same reward config.
+
+    Args:
+        env: The environment.
+        command_name: Name of the command manager.
+        sensor_cfg: Sensor configuration (unused, for API consistency).
+        ang_vel_threshold: Angular velocity threshold (rad/s) above which asymmetry is allowed. Defaults to 0.2.
     """
     if not hasattr(env, "_last_step_dist"):
         return torch.zeros(env.num_envs, device=env.device)
+
+    import torch
+
+    cmd = env.command_manager.get_command(command_name)
+    lin_vel_xy = torch.norm(cmd[:, :2], dim=1)
+    ang_vel = cmd[:, 2]
+
+    # Only penalize asymmetry when moving straight
+    moving_straight = (lin_vel_xy > 0.1) & (torch.abs(ang_vel) < ang_vel_threshold)
+
     last_dist: torch.Tensor = getattr(env, "_last_step_dist")
     penalty = torch.abs(last_dist[:, 0] - last_dist[:, 1])
-    penalty *= torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > 0.1
+    penalty *= moving_straight.float()
+
     return penalty
+
+
+def feet_max_velocity_penalty(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    asset_cfg: SceneEntityCfg,
+    speed_multiplier: float = 2.5,
+) -> torch.Tensor:
+    """Penalize feet moving faster than a command-adaptive threshold using squared L2 penalty.
+
+    Discourages unnatural, high-speed foot motion relative to commanded locomotion speed.
+    Useful for preventing the policy from achieving locomotion through fast, jittery motion.
+
+    Args:
+        env: The environment.
+        command_name: Name of the command manager.
+        asset_cfg: Configuration for the feet bodies.
+        speed_multiplier: Multiplier on commanded linear velocity. Threshold = speed_multiplier * cmd_lin_vel.
+                         Defaults to 2.5 (feet can move up to 2.5x commanded speed).
+
+    Returns:
+        Penalty tensor of shape (num_envs,). Zero if foot speed <= threshold, else (speed - threshold)^2.
+    """
+    import torch
+
+    asset = env.scene[asset_cfg.name]
+    foot_lin_vel = torch.norm(asset.data.body_lin_vel_w[:, asset_cfg.body_ids, :], dim=-1)  # (num_envs, num_feet)
+
+    # Get commanded linear velocity magnitude
+    cmd = env.command_manager.get_command(command_name)
+    cmd_lin_vel = torch.norm(cmd[:, :2], dim=1)  # (num_envs,)
+
+    # Adaptive threshold: 2.5x the commanded speed
+    threshold = speed_multiplier * cmd_lin_vel.unsqueeze(1)  # (num_envs, 1)
+
+    # Penalty: (max(0, speed - threshold))^2
+    excess_speed = torch.clamp(foot_lin_vel - threshold, min=0.0)
+    penalty = torch.sum(excess_speed**2, dim=1)  # Sum across feet
+
+    return penalty
+
+
+def joint_direction_change_penalty(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    vel_deadband: float = 0.2,
+) -> torch.Tensor:
+    """Penalize per-step joint velocity direction changes with a deadband.
+
+    This term detects sign flips in joint velocity between two consecutive
+    policy steps. A deadband avoids penalizing tiny sign changes caused by
+    encoder noise around zero velocity.
+
+    Args:
+        env: The environment.
+        asset_cfg: Joint subset to evaluate.
+        vel_deadband: Minimum absolute velocity required (both previous and current)
+            for a sign change to be considered real. Units: rad/s.
+
+    Returns:
+        Per-env penalty equal to the count of valid direction changes across joints.
+    """
+    asset = env.scene[asset_cfg.name]
+    curr_vel = asset.data.joint_vel[:, asset_cfg.joint_ids]
+
+    buf_key = "_prev_joint_vel_for_direction_change"
+    if not hasattr(env, buf_key):
+        setattr(env, buf_key, curr_vel.clone())
+    prev_vel: torch.Tensor = getattr(env, buf_key)
+
+    # Sign flip if product is negative; deadband filters noisy zero-crossings.
+    flipped = (curr_vel * prev_vel) < 0.0
+    above_deadband = (torch.abs(curr_vel) > vel_deadband) & (torch.abs(prev_vel) > vel_deadband)
+    valid_flip = flipped & above_deadband
+
+    # Cache for next step.
+    prev_vel.copy_(curr_vel)
+
+    return torch.sum(valid_flip.float(), dim=1)
+
+
+def joint_power_l1(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize mechanical power (|velocity * torque|) across joints.
+
+    Directly penalizes energy expenditure. Rapid shuffling wastes power
+    through constant acceleration/deceleration, while smooth long strides
+    have lower power due to constant-velocity swing phases.
+    """
+    asset = env.scene[asset_cfg.name]
+    vel = asset.data.joint_vel[:, asset_cfg.joint_ids]
+    torque = asset.data.applied_torque[:, asset_cfg.joint_ids]
+    return torch.sum(torch.abs(vel * torque), dim=1)
