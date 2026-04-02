@@ -29,14 +29,14 @@ class RTv5Rewards:
         params={"command_name": "base_velocity", "std": 0.5}
     )
 
-    stand_still = RewTerm(
-        func=mdp.stand_still_joint_deviation_l1,
-        weight=-0.4,
-        params={
-            "command_name": "base_velocity",
-            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-        },
-    )
+    # stand_still = RewTerm(
+    #     func=mdp.stand_still_joint_deviation_l1,
+    #     weight=-0.4,
+    #     params={
+    #         "command_name": "base_velocity",
+    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+    #     },
+    # )
 
     feet_air_time = RewTerm(
         func=mdp.feet_air_time,
@@ -196,7 +196,7 @@ class RTv5Rewards:
 
     joint_deviation_hip_rotate = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-0.2,
+        weight=-0.4,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_revolute"])},
     )
 
