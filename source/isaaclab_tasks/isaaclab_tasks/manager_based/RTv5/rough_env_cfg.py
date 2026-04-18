@@ -26,7 +26,7 @@ class RTv5Rewards:
     track_ang_vel = RewTerm(
         func=mdp.track_ang_vel_z_world_exp, 
         weight=1.0, 
-        params={"command_name": "base_velocity", "std": 0.25}
+        params={"command_name": "base_velocity", "std": 0.5}
     )
 
     # stand_still = RewTerm(

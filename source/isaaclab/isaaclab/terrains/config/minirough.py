@@ -40,12 +40,11 @@ MINI_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
         "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
             noise_range=(0.0, 0.02), noise_step=0.005, border_width=0.25, horizontal_scale=1.0
         ),
-        "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
-            slope_range=(0.0, 0.10), platform_width=1.0, border_width=0.25
-        ),
-        
         "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
-            slope_range=(0.0, 0.10), platform_width=1.0, border_width=0.25
+            slope_range=(0.0, 0.05), platform_width=1.0, border_width=0.25
+        ),
+        "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
+            slope_range=(0.0, 0.05), platform_width=1.0, border_width=0.25
         ),
     },
 )

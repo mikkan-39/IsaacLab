@@ -22,7 +22,7 @@ from isaaclab.utils.modifiers import DelayedObservationCfg
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 import torch
 
-GAIT_FREQ_RANGE = (1.0, 2.0)  # Hz — per-env random frequency range
+GAIT_FREQ_RANGE = (0.8, 1.2)  # Hz — per-env random frequency range
 
 
 def _get_gait_freq(env) -> torch.Tensor:
@@ -157,7 +157,7 @@ class CommandsCfg:
         heading_command=False,
         debug_vis=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 0.25), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.3, 0.3)
+            lin_vel_x=(0.0, 0.35), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0)
         ),
     )
 
@@ -471,8 +471,13 @@ def gait_metrics(
     env,
     env_ids,
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
+    min_air_time: float = 0.04,
 ) -> dict[str, float]:
     """Passive gait metrics: per-foot step counts, frequency, symmetry, and swing time.
+
+    Only counts a touchdown as a "step" if the foot was airborne for at least
+    ``min_air_time`` seconds before landing. This filters out physics contact
+    bouncing that inflates step counts.
 
     body_ids[0] = right foot, body_ids[1] = left foot (matching body_names order).
     """
@@ -490,8 +495,12 @@ def gait_metrics(
         env._gait_swing_sum = torch.zeros(env.num_envs, device=env.device)
         env._gait_swing_count = torch.zeros(env.num_envs, device=env.device)
 
-    env._gait_steps_right += first_contact[:, 0].float()
-    env._gait_steps_left += first_contact[:, 1].float()
+    # Only count as a real step if preceding air time exceeded min_air_time
+    real_step_right = first_contact[:, 0] & (env._gait_prev_air_time[:, 0] > min_air_time)
+    real_step_left = first_contact[:, 1] & (env._gait_prev_air_time[:, 1] > min_air_time)
+
+    env._gait_steps_right += real_step_right.float()
+    env._gait_steps_left += real_step_left.float()
     env._gait_elapsed += env.step_dt
 
     elapsed = env._gait_elapsed.clamp(min=0.1)
@@ -503,11 +512,10 @@ def gait_metrics(
     min_steps = torch.min(env._gait_steps_right, env._gait_steps_left)
     symmetry = min_steps / max_steps
 
-    # Swing duration: use PREVIOUS step's air_time (before first_contact resets it to 0)
-    for foot_idx in range(2):
-        landed = first_contact[:, foot_idx]
-        env._gait_swing_sum += torch.where(landed, env._gait_prev_air_time[:, foot_idx], torch.zeros_like(env._gait_swing_sum))
-        env._gait_swing_count += landed.float()
+    # Swing duration: only from real steps (filtered)
+    for foot_idx, real_step in enumerate([real_step_right, real_step_left]):
+        env._gait_swing_sum += torch.where(real_step, env._gait_prev_air_time[:, foot_idx], torch.zeros_like(env._gait_swing_sum))
+        env._gait_swing_count += real_step.float()
 
     mean_swing = env._gait_swing_sum / env._gait_swing_count.clamp(min=1.0)
 
