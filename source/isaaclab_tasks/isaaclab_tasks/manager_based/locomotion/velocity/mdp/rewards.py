@@ -374,6 +374,43 @@ def joint_direction_change_penalty(
     return torch.sum(valid_flip.float(), dim=1)
 
 
+def contact_gating_reward(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    sensor_cfg: SceneEntityCfg,
+    gait_freq: float = 1.5,
+    stance_ratio: float = 0.6,
+) -> torch.Tensor:
+    """Reward for matching foot contact state to a gait phase clock.
+
+    A phase clock at ``gait_freq`` Hz defines stance/swing windows per foot.
+    Right foot uses the raw phase; left foot is offset by pi (alternating).
+    The stance window occupies ``stance_ratio`` of each cycle.
+
+    Returns +1 per foot for correct contact state, -1 for wrong.
+    Total range [-2, +2]. Gated by velocity command (inactive when standing).
+    """
+    phase = 2.0 * torch.pi * gait_freq * env.episode_length_buf.float() * env.step_dt
+    stance_end = stance_ratio * 2.0 * torch.pi
+
+    right_phase = phase % (2.0 * torch.pi)
+    left_phase = (phase + torch.pi) % (2.0 * torch.pi)
+
+    right_should_contact = right_phase < stance_end
+    left_should_contact = left_phase < stance_end
+
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    in_contact = contact_sensor.data.current_contact_time[:, sensor_cfg.body_ids] > 0.0
+
+    right_correct = (right_should_contact == in_contact[:, 0]).float() * 2.0 - 1.0
+    left_correct = (left_should_contact == in_contact[:, 1]).float() * 2.0 - 1.0
+
+    cmd = env.command_manager.get_command(command_name)
+    moving = (torch.norm(cmd[:, :2], dim=1) > 0.05).float()
+
+    return (right_correct + left_correct) * moving
+
+
 def joint_power_l1(
     env: ManagerBasedRLEnv,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
@@ -388,3 +425,39 @@ def joint_power_l1(
     vel = asset.data.joint_vel[:, asset_cfg.joint_ids]
     torque = asset.data.applied_torque[:, asset_cfg.joint_ids]
     return torch.sum(torch.abs(vel * torque), dim=1)
+
+
+def step_frequency_penalty(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    sensor_cfg: SceneEntityCfg,
+    target_freq: float = 3.0,
+) -> torch.Tensor:
+    """Quadratic penalty when step frequency deviates from a target.
+
+    Uses cumulative step counting per episode. Resets automatically at
+    the start of each episode via ``episode_length_buf``.
+
+    Only active when the robot is commanded to move (||vel_xy|| > 0.05).
+    """
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, sensor_cfg.body_ids]
+
+    if not hasattr(env, "_sfp_count"):
+        env._sfp_count = torch.zeros(env.num_envs, device=env.device)
+        env._sfp_elapsed = torch.zeros(env.num_envs, device=env.device)
+
+    just_reset = env.episode_length_buf <= 1
+    env._sfp_count[just_reset] = 0.0
+    env._sfp_elapsed[just_reset] = 0.0
+
+    env._sfp_count += first_contact.any(dim=1).float()
+    env._sfp_elapsed += env.step_dt
+
+    freq = env._sfp_count / env._sfp_elapsed.clamp(min=env.step_dt)
+
+    cmd = env.command_manager.get_command(command_name)
+    moving = torch.norm(cmd[:, :2], dim=1) > 0.05
+
+    penalty = (freq - target_freq) ** 2 * moving.float()
+    return penalty

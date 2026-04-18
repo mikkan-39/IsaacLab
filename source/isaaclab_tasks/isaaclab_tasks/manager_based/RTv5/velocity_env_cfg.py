@@ -20,6 +20,15 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise, GaussianNois
 from isaaclab.utils.modifiers import DelayedObservationCfg
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
+import torch
+
+GAIT_FREQ = 1.5  # Hz — shared between observation and reward
+
+
+def gait_phase_obs(env, gait_freq: float = GAIT_FREQ) -> torch.Tensor:
+    """Observation: sin/cos of the gait phase clock. Shape (num_envs, 2)."""
+    phase = 2.0 * torch.pi * gait_freq * env.episode_length_buf.float() * env.step_dt
+    return torch.stack([torch.sin(phase), torch.cos(phase)], dim=1)
 
 ##
 # Pre-defined configs
@@ -29,6 +38,25 @@ from isaaclab.terrains.config.minirough import MINI_ROUGH_TERRAINS_CFG  # isort:
 # controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Arm|to_Shoulder|shoulder)).*$"
 # controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Arm|to_ShoulderR|to_ShoulderL|Foot)).*$"
 controllableJointsRegex = "^(?!.*(Neck|to_Elbow|to_Arm|to_ShoulderR|to_ShoulderL)).*$"
+
+def randomize_actuator_velocity_limit(
+    env,
+    env_ids: torch.Tensor | None,
+    asset_cfg: SceneEntityCfg,
+    velocity_range: tuple[float, float] = (5.24, 11.1),
+):
+    """Randomize the velocity_limit on DCMotor-based actuators and recompute derived values."""
+    asset = env.scene[asset_cfg.name]
+    if env_ids is None:
+        env_ids = torch.arange(env.scene.num_envs, device=asset.device)
+    for actuator in asset.actuators.values():
+        if not hasattr(actuator, "_vel_at_effort_lim"):
+            continue
+        new_vel = torch.empty(len(env_ids), actuator.num_joints, device=asset.device).uniform_(*velocity_range)
+        actuator.velocity_limit[env_ids] = new_vel
+        actuator._vel_at_effort_lim[env_ids] = new_vel * (
+            1.0 + actuator.effort_limit[env_ids] / actuator._saturation_effort
+        )
 
 ##
 # Scene definition
@@ -114,7 +142,7 @@ class CommandsCfg:
         heading_command=False,
         debug_vis=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 0.5), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.5, 0.5)
+            lin_vel_x=(0.0, 0.25), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.3, 0.3)
         ),
     )
 
@@ -184,6 +212,10 @@ class ObservationsCfg:
         velocity_commands = ObsTerm(
             func=mdp.generated_commands, 
             params={"command_name": "base_velocity"}
+        )
+        gait_phase = ObsTerm(
+            func=gait_phase_obs,
+            params={"gait_freq": GAIT_FREQ},
         )
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel, 
@@ -329,14 +361,15 @@ class EventCfg:
     #     },
     # )
 
-    # robot_velocity_limit = EventTerm(
-    #     func=randomize_actuator_velocity_limit,
-    #     mode="reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-    #         "velocity_range": (5.24, 11.1),
-    #     },
-    # )
+
+    robot_velocity_limit = EventTerm(
+        func=randomize_actuator_velocity_limit,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+            "velocity_range": (5.24, 11.1),
+        },
+    )
 
 
 
@@ -422,10 +455,80 @@ def adaptive_reward_ramp(
     return {"step_reward_scale": scale, "vel_error_ema": ema}
 
 
+def gait_metrics(
+    env,
+    env_ids,
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
+) -> dict[str, float]:
+    """Passive gait metrics: per-foot step counts, frequency, symmetry, and swing time.
+
+    body_ids[0] = right foot, body_ids[1] = left foot (matching body_names order).
+    """
+    import torch
+    from isaaclab.sensors import ContactSensor
+
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, sensor_cfg.body_ids]
+
+    if not hasattr(env, "_gait_steps_right"):
+        env._gait_steps_right = torch.zeros(env.num_envs, device=env.device)
+        env._gait_steps_left = torch.zeros(env.num_envs, device=env.device)
+        env._gait_elapsed = torch.zeros(env.num_envs, device=env.device)
+        env._gait_prev_air_time = torch.zeros(env.num_envs, 2, device=env.device)
+        env._gait_swing_sum = torch.zeros(env.num_envs, device=env.device)
+        env._gait_swing_count = torch.zeros(env.num_envs, device=env.device)
+
+    env._gait_steps_right += first_contact[:, 0].float()
+    env._gait_steps_left += first_contact[:, 1].float()
+    env._gait_elapsed += env.step_dt
+
+    elapsed = env._gait_elapsed.clamp(min=0.1)
+    total_steps = env._gait_steps_right + env._gait_steps_left
+    freq = total_steps / elapsed
+
+    # Symmetry: min/max of per-foot counts (1.0 = perfect, 0.0 = one-legged)
+    max_steps = torch.max(env._gait_steps_right, env._gait_steps_left).clamp(min=1.0)
+    min_steps = torch.min(env._gait_steps_right, env._gait_steps_left)
+    symmetry = min_steps / max_steps
+
+    # Swing duration: use PREVIOUS step's air_time (before first_contact resets it to 0)
+    for foot_idx in range(2):
+        landed = first_contact[:, foot_idx]
+        env._gait_swing_sum += torch.where(landed, env._gait_prev_air_time[:, foot_idx], torch.zeros_like(env._gait_swing_sum))
+        env._gait_swing_count += landed.float()
+
+    mean_swing = env._gait_swing_sum / env._gait_swing_count.clamp(min=1.0)
+
+    # Cache current air_time for next step (read AFTER using the previous cache)
+    env._gait_prev_air_time = contact_sensor.data.current_air_time[:, sensor_cfg.body_ids].clone()
+
+    # Reset counters for terminated envs
+    env._gait_steps_right[env_ids] = 0.0
+    env._gait_steps_left[env_ids] = 0.0
+    env._gait_elapsed[env_ids] = 0.0
+    env._gait_swing_sum[env_ids] = 0.0
+    env._gait_swing_count[env_ids] = 0.0
+
+    return {
+        "step_freq_hz": freq.mean().item(),
+        "symmetry": symmetry.mean().item(),
+        "mean_swing_s": mean_swing.mean().item(),
+        "steps_right": env._gait_steps_right.mean().item(),
+        "steps_left": env._gait_steps_left.mean().item(),
+    }
+
+
 @configclass
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
     terrain_levels = CurrTerm(func=mdp.terrain_levels_vel) # type: ignore
+
+    gait_monitor = CurrTerm(
+        func=gait_metrics,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
+        },
+    )
 
     # step_reward_ramp = CurrTerm(
     #     func=adaptive_reward_ramp,

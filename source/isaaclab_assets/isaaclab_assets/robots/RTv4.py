@@ -78,6 +78,7 @@ RT_CFG = ArticulationCfg(
         # ),
 
         "ST3215-HS": DCMotorCfg(
+            # joint_names_expr=["^(?!.*FootJoint).*"],
             joint_names_expr=[".*"],
             stiffness=12.0,
             damping=2.5,
@@ -88,5 +89,16 @@ RT_CFG = ArticulationCfg(
             velocity_limit=11.1,
             velocity_limit_sim=11.1,
         ),
+        # "ST3215-HS-Feet": DCMotorCfg(
+        #     joint_names_expr=[".*FootJoint.*"],
+        #     stiffness=12.0,
+        #     damping=2.5,
+        #     armature=0.01,
+        #     saturation_effort=1.96,
+        #     effort_limit=0.2,
+        #     effort_limit_sim=0.2,
+        #     velocity_limit=11.1,
+        #     velocity_limit_sim=11.1,
+        # ),
     },
 )
