@@ -7,7 +7,7 @@ from isaaclab.utils import configclass
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 import isaaclab_tasks.manager_based.classic.humanoid.mdp as mdp2
 
-from .velocity_env_cfg import LocomotionVelocityRoughEnvCfg, controllableJointsRegex, GAIT_FREQ
+from .velocity_env_cfg import LocomotionVelocityRoughEnvCfg, controllableJointsRegex
 
 from isaaclab_assets import RT_CFG 
 
@@ -44,7 +44,6 @@ class RTv5Rewards:
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
             "command_name": "base_velocity",
-            "gait_freq": GAIT_FREQ,
             "stance_ratio": 0.6,
         },
     )
@@ -94,7 +93,7 @@ class RTv5Rewards:
 
     actions_cost_diff = RewTerm(
         func=mdp.action_rate_l2,
-        weight=-0.05,
+        weight=-0.15,
     )
 
     # joint_dir_change = RewTerm(

@@ -22,12 +22,27 @@ from isaaclab.utils.modifiers import DelayedObservationCfg
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 import torch
 
-GAIT_FREQ = 1.5  # Hz — shared between observation and reward
+GAIT_FREQ_RANGE = (1.0, 2.0)  # Hz — per-env random frequency range
 
 
-def gait_phase_obs(env, gait_freq: float = GAIT_FREQ) -> torch.Tensor:
-    """Observation: sin/cos of the gait phase clock. Shape (num_envs, 2)."""
-    phase = 2.0 * torch.pi * gait_freq * env.episode_length_buf.float() * env.step_dt
+def _get_gait_freq(env) -> torch.Tensor:
+    """Return per-env gait frequency tensor, creating and sampling it if needed."""
+    if not hasattr(env, "_gait_freq"):
+        env._gait_freq = torch.empty(env.num_envs, device=env.device).uniform_(*GAIT_FREQ_RANGE)
+    return env._gait_freq
+
+
+def _resample_gait_freq(env, env_ids):
+    """Resample gait frequency for given env_ids. Called from gait_metrics on reset."""
+    freq = _get_gait_freq(env)
+    n = len(env_ids) if not isinstance(env_ids, slice) else env.num_envs
+    freq[env_ids] = torch.empty(n, device=env.device).uniform_(*GAIT_FREQ_RANGE)
+
+
+def gait_phase_obs(env) -> torch.Tensor:
+    """Observation: sin/cos of the per-env gait phase clock. Shape (num_envs, 2)."""
+    freq = _get_gait_freq(env)
+    phase = 2.0 * torch.pi * freq * env.episode_length_buf.float() * env.step_dt
     return torch.stack([torch.sin(phase), torch.cos(phase)], dim=1)
 
 ##
@@ -213,10 +228,7 @@ class ObservationsCfg:
             func=mdp.generated_commands, 
             params={"command_name": "base_velocity"}
         )
-        gait_phase = ObsTerm(
-            func=gait_phase_obs,
-            params={"gait_freq": GAIT_FREQ},
-        )
+        gait_phase = ObsTerm(func=gait_phase_obs)
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel, 
             noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
@@ -502,12 +514,15 @@ def gait_metrics(
     # Cache current air_time for next step (read AFTER using the previous cache)
     env._gait_prev_air_time = contact_sensor.data.current_air_time[:, sensor_cfg.body_ids].clone()
 
-    # Reset counters for terminated envs
+    # Reset counters and resample gait frequency for terminated envs
     env._gait_steps_right[env_ids] = 0.0
     env._gait_steps_left[env_ids] = 0.0
     env._gait_elapsed[env_ids] = 0.0
     env._gait_swing_sum[env_ids] = 0.0
     env._gait_swing_count[env_ids] = 0.0
+    _resample_gait_freq(env, env_ids)
+
+    gait_freq = _get_gait_freq(env)
 
     return {
         "step_freq_hz": freq.mean().item(),
@@ -515,6 +530,7 @@ def gait_metrics(
         "mean_swing_s": mean_swing.mean().item(),
         "steps_right": env._gait_steps_right.mean().item(),
         "steps_left": env._gait_steps_left.mean().item(),
+        "gait_clock_hz": gait_freq.mean().item(),
     }
 
 

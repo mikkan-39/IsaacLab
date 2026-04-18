@@ -378,37 +378,58 @@ def contact_gating_reward(
     env: ManagerBasedRLEnv,
     command_name: str,
     sensor_cfg: SceneEntityCfg,
-    gait_freq: float = 1.5,
     stance_ratio: float = 0.6,
 ) -> torch.Tensor:
-    """Reward for matching foot contact state to a gait phase clock.
+    """Smooth reward for matching foot contact state to a per-env gait phase clock.
 
-    A phase clock at ``gait_freq`` Hz defines stance/swing windows per foot.
-    Right foot uses the raw phase; left foot is offset by pi (alternating).
+    Uses ``env._gait_freq`` (per-env tensor, sampled on reset) as the clock
+    frequency. Right foot uses the raw phase; left foot is offset by pi.
     The stance window occupies ``stance_ratio`` of each cycle.
 
-    Returns +1 per foot for correct contact state, -1 for wrong.
+    Reward per foot is continuous: peaks at +1 (center of correct phase),
+    tapers to 0 at phase transitions, and dips to -1 (center of wrong phase).
+    This gives the policy gradient about how far off its timing is.
+
     Total range [-2, +2]. Gated by velocity command (inactive when standing).
     """
-    phase = 2.0 * torch.pi * gait_freq * env.episode_length_buf.float() * env.step_dt
-    stance_end = stance_ratio * 2.0 * torch.pi
+    if not hasattr(env, "_gait_freq"):
+        from isaaclab_tasks.manager_based.RTv5.velocity_env_cfg import _get_gait_freq
+        _get_gait_freq(env)
 
-    right_phase = phase % (2.0 * torch.pi)
-    left_phase = (phase + torch.pi) % (2.0 * torch.pi)
-
-    right_should_contact = right_phase < stance_end
-    left_should_contact = left_phase < stance_end
+    TWO_PI = 2.0 * torch.pi
+    phase = TWO_PI * env._gait_freq * env.episode_length_buf.float() * env.step_dt
+    stance_end = stance_ratio * TWO_PI
+    swing_len = TWO_PI - stance_end
 
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
     in_contact = contact_sensor.data.current_contact_time[:, sensor_cfg.body_ids] > 0.0
 
-    right_correct = (right_should_contact == in_contact[:, 0]).float() * 2.0 - 1.0
-    left_correct = (left_should_contact == in_contact[:, 1]).float() * 2.0 - 1.0
+    reward = torch.zeros(env.num_envs, device=env.device)
+
+    for foot_idx, offset in enumerate([0.0, torch.pi]):
+        foot_phase = (phase + offset) % TWO_PI
+        in_stance = foot_phase < stance_end
+
+        # Normalized position within current window [0, 1]
+        norm_pos = torch.where(
+            in_stance,
+            foot_phase / stance_end,
+            (foot_phase - stance_end) / swing_len,
+        )
+        # Smooth intensity: 0 at window boundaries, 1 at center
+        intensity = torch.sin(torch.pi * norm_pos)
+
+        # +1 during stance, -1 during swing
+        expected = torch.where(in_stance, 1.0, -1.0)
+        # +1 if contact, -1 if not
+        actual = in_contact[:, foot_idx].float() * 2.0 - 1.0
+
+        reward += intensity * expected * actual
 
     cmd = env.command_manager.get_command(command_name)
     moving = (torch.norm(cmd[:, :2], dim=1) > 0.05).float()
 
-    return (right_correct + left_correct) * moving
+    return reward * moving
 
 
 def joint_power_l1(
