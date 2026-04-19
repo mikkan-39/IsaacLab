@@ -186,7 +186,7 @@ class ObservationsCfg:
                 # Accelerometer with gravity (like real IMU)
         base_lin_acc = ObsTerm(
             func=mdp.base_lin_acc_with_gravity,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"),
+            noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
             params={"gravity_bias": (0.0, 0.0, 9.81)},
             # modifiers=[
             #     DelayedObservationCfg(
@@ -194,33 +194,33 @@ class ObservationsCfg:
             #         max_lag=3,
             #         per_env=True,
             #         hold_prob=0.9,
-            #         update_period=1,
+            #         update_period=0,
             #     )
             # ],
         )
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"),
+            noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"),
             # modifiers=[
             #     DelayedObservationCfg(
             #         min_lag=0,
             #         max_lag=3,
             #         per_env=True,
             #         hold_prob=0.9,
-            #         update_period=1,
+            #         update_period=0,
             #     )
             # ],
         )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"),
+            noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
             # modifiers=[
             #     DelayedObservationCfg(
             #         min_lag=0,
             #         max_lag=3,
             #         per_env=True,
             #         hold_prob=0.9,
-            #         update_period=1,
+            #         update_period=0,
             #     )
             # ],
         )
@@ -291,7 +291,7 @@ class ObservationsCfg:
         )
 
         def __post_init__(self):
-            self.enable_corruption = False
+            self.enable_corruption = True
             self.concatenate_terms = True
 
     # observation groups
@@ -342,13 +342,12 @@ class EventCfg:
         },
     )
 
-    # push_robot = EventTerm(
-    #     func=mdp.push_by_setting_velocity,
-    #     mode="interval",
-    #     interval_range_s=(1.0, 10.0),
-    #     params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)}},
-        
-    # )
+    push_robot = EventTerm(
+        func=mdp.push_by_setting_velocity,
+        mode="interval",
+        interval_range_s=(1.0, 10.0),
+        params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)}},
+    )
 
     # robot_joint_stiffness_and_damping = EventTerm(
     #     func=mdp.randomize_actuator_gains,

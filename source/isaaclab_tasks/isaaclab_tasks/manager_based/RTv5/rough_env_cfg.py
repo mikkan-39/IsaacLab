@@ -173,7 +173,7 @@ class RTv5Rewards:
 
     joint_deviation_hip_rotate = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-0.2,
+        weight=-0.5,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_revolute"])},
     )
 

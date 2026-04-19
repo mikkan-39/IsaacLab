@@ -20,6 +20,7 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         actor_hidden_dims=[512, 256, 128],
         critic_hidden_dims=[512, 256, 128],
         activation="elu",
+        # noise_std_type="log",
     )
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
