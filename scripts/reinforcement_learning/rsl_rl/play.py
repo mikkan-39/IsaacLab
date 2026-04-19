@@ -34,6 +34,24 @@ parser.add_argument(
     help="Use the pre-trained checkpoint from Nucleus.",
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
+parser.add_argument(
+    "--print_policy_obs",
+    action="store_true",
+    default=False,
+    help="Print the policy observation vector (env 0) for sim2real comparison with the robot.",
+)
+parser.add_argument(
+    "--print_policy_obs_max_steps",
+    type=int,
+    default=30,
+    help="With --print_policy_obs: print at most N lines (initial obs + after each env.step). Default: 30.",
+)
+parser.add_argument(
+    "--print_policy_obs_env",
+    type=int,
+    default=0,
+    help="Environment index for --print_policy_obs. Default: 0.",
+)
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
 # append AppLauncher cli args
@@ -78,6 +96,19 @@ from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 
 # PLACEHOLDER: Extension template (do not remove this comment)
+
+
+def _print_policy_observation(obs, env_idx: int, step_label: str) -> None:
+    """Print one policy-group observation row for sim2real debugging (matches deployed policy input)."""
+    try:
+        pol = obs["policy"]
+    except (KeyError, AttributeError) as e:
+        print(f"[print_policy_obs {step_label}] Missing 'policy' in observation: {e!r}, type={type(obs)!r}")
+        return
+    row = pol[env_idx].detach().cpu().flatten()
+    # Single line: easy to copy into a diff vs robot JSONL
+    s = ",".join(f"{float(x):.8f}" for x in row)
+    print(f"[sim policy_obs env={env_idx} {step_label}] [{s}]")
 
 
 @hydra_task_config(args_cli.task, args_cli.agent)
@@ -177,6 +208,12 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     # reset environment
     obs = env.get_observations()
     timestep = 0
+    policy_obs_print_count = 0
+    pe = args_cli.print_policy_obs_env
+    pomax = args_cli.print_policy_obs_max_steps
+    if args_cli.print_policy_obs and policy_obs_print_count < pomax:
+        _print_policy_observation(obs, pe, "after_get_observations")
+        policy_obs_print_count += 1
     # simulate environment
     while simulation_app.is_running():
         start_time = time.time()
@@ -188,6 +225,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
             obs, _, dones, _ = env.step(actions)
             # reset recurrent states for episodes that have terminated
             policy_nn.reset(dones)
+        if args_cli.print_policy_obs and policy_obs_print_count < pomax:
+            _print_policy_observation(obs, pe, f"after_step timestep={timestep}")
+            policy_obs_print_count += 1
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video

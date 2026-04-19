@@ -20,6 +20,7 @@ from isaaclab.utils.noise import AdditiveUniformNoiseCfg as Unoise, GaussianNois
 from isaaclab.utils.modifiers import DelayedObservationCfg
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
+from isaaclab_tasks.manager_based.RTv5.delayed_backlash_action import DelayedBacklashJointPositionActionCfg
 import torch
 
 GAIT_FREQ_RANGE = (1.0, 1.5)  # Hz — per-env random frequency range
@@ -166,13 +167,17 @@ class CommandsCfg:
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_pos = mdp.JointPositionActionCfg(asset_name="robot", 
-                                           joint_names=[controllableJointsRegex], 
-                                           scale=1.0, 
-                                           use_default_offset=True,
-                                           preserve_order=True,
-                                        #    clip={".*": (-1.0, 1.0)}
-                                           )
+    joint_pos = DelayedBacklashJointPositionActionCfg(
+        asset_name="robot",
+        joint_names=[controllableJointsRegex],
+        scale=1.0,
+        use_default_offset=True,
+        preserve_order=True,
+        min_delay_steps=2,
+        max_delay_steps=4,
+        backlash_deg=1.0,
+        action_noise_std=0.01,
+    )
 
 
 @configclass
