@@ -93,7 +93,7 @@ class RTv5Rewards:
 
     actions_cost_diff = RewTerm(
         func=mdp.action_rate_l2,
-        weight=-0.15,
+        weight=-0.1,
     )
 
     # joint_dir_change = RewTerm(

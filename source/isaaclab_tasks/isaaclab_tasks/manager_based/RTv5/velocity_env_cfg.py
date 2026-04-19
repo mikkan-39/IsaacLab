@@ -22,7 +22,7 @@ from isaaclab.utils.modifiers import DelayedObservationCfg
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 import torch
 
-GAIT_FREQ_RANGE = (0.8, 1.2)  # Hz — per-env random frequency range
+GAIT_FREQ_RANGE = (1.0, 1.5)  # Hz — per-env random frequency range
 
 
 def _get_gait_freq(env) -> torch.Tensor:
