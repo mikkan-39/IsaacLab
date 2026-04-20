@@ -203,19 +203,19 @@ class ObservationsCfg:
         #     #     )
         #     # ],
         # )
-        base_ang_vel = ObsTerm(
-            func=mdp.base_ang_vel,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"),
-            # modifiers=[
-            #     DelayedObservationCfg(
-            #         min_lag=0,
-            #         max_lag=3,
-            #         per_env=True,
-            #         hold_prob=0.9,
-            #         update_period=0,
-            #     )
-            # ],
-        )
+        # base_ang_vel = ObsTerm(
+        #     func=mdp.base_ang_vel,
+        #     noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"),
+        #     # modifiers=[
+        #     #     DelayedObservationCfg(
+        #     #         min_lag=0,
+        #     #         max_lag=3,
+        #     #         per_env=True,
+        #     #         hold_prob=0.9,
+        #     #         update_period=0,
+        #     #     )
+        #     # ],
+        # )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
             noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
@@ -228,6 +228,18 @@ class ObservationsCfg:
             #         update_period=0,
             #     )
             # ],
+        )
+        projected_gravity_t1 = ObsTerm(
+            func=mdp.projected_gravity,
+            noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
+            modifiers=[
+                DelayedObservationCfg(
+                    min_lag=1,
+                    max_lag=1,
+                    per_env=False,
+                    update_period=0,
+                )
+            ],
         )
         velocity_commands = ObsTerm(
             func=mdp.generated_commands, 
