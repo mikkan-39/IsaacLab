@@ -189,20 +189,20 @@ class ObservationsCfg:
         """Observations for policy group."""
 
                 # Accelerometer with gravity (like real IMU)
-        base_lin_acc = ObsTerm(
-            func=mdp.base_lin_acc_with_gravity,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
-            params={"gravity_bias": (0.0, 0.0, 9.81)},
-            # modifiers=[
-            #     DelayedObservationCfg(
-            #         min_lag=0,
-            #         max_lag=3,
-            #         per_env=True,
-            #         hold_prob=0.9,
-            #         update_period=0,
-            #     )
-            # ],
-        )
+        # base_lin_acc = ObsTerm(
+        #     func=mdp.base_lin_acc_with_gravity,
+        #     noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
+        #     params={"gravity_bias": (0.0, 0.0, 9.81)},
+        #     # modifiers=[
+        #     #     DelayedObservationCfg(
+        #     #         min_lag=0,
+        #     #         max_lag=3,
+        #     #         per_env=True,
+        #     #         hold_prob=0.9,
+        #     #         update_period=0,
+        #     #     )
+        #     # ],
+        # )
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
             noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"),
@@ -250,18 +250,18 @@ class ObservationsCfg:
             #     )
             # ],
         )
-        joint_pos_t1 = ObsTerm(
-            func=mdp.joint_pos_rel, 
-            noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
-            params={"asset_cfg": SceneEntityCfg(
-                "robot", joint_names=[controllableJointsRegex]
-            )},
-            modifiers=[DelayedObservationCfg(
-                min_lag=1, 
-                max_lag=1, 
-                per_env=False,
-                update_period=0)],
-        )
+        # joint_pos_t1 = ObsTerm(
+        #     func=mdp.joint_pos_rel, 
+        #     noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
+        #     params={"asset_cfg": SceneEntityCfg(
+        #         "robot", joint_names=[controllableJointsRegex]
+        #     )},
+        #     modifiers=[DelayedObservationCfg(
+        #         min_lag=1, 
+        #         max_lag=1, 
+        #         per_env=False,
+        #         update_period=0)],
+        # )
         # joint_vel = ObsTerm(
         #     func=mdp.joint_vel_rel, 
         #     noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"), 
@@ -270,33 +270,33 @@ class ObservationsCfg:
         #     )}
         # )
         actions = ObsTerm(func=mdp.last_action)
-        action_t1 = ObsTerm(
-            func=mdp.last_action,
-            modifiers=[DelayedObservationCfg(
-                min_lag=1, 
-                max_lag=1, 
-                per_env=False,
-                update_period=0)],
-        )
-        action_t2 = ObsTerm(
-            func=mdp.last_action,
-            modifiers=[DelayedObservationCfg(
-                min_lag=2, 
-                max_lag=2, 
-                per_env=False,
-                update_period=0)],
-        )
-        action_t3 = ObsTerm(
-            func=mdp.last_action,
-            modifiers=[DelayedObservationCfg(
-                min_lag=3, 
-                max_lag=3, 
-                per_env=False,
-                update_period=0)],
-        )
+        # action_t1 = ObsTerm(
+        #     func=mdp.last_action,
+        #     modifiers=[DelayedObservationCfg(
+        #         min_lag=1, 
+        #         max_lag=1, 
+        #         per_env=False,
+        #         update_period=0)],
+        # )
+        # action_t2 = ObsTerm(
+        #     func=mdp.last_action,
+        #     modifiers=[DelayedObservationCfg(
+        #         min_lag=2, 
+        #         max_lag=2, 
+        #         per_env=False,
+        #         update_period=0)],
+        # )
+        # action_t3 = ObsTerm(
+        #     func=mdp.last_action,
+        #     modifiers=[DelayedObservationCfg(
+        #         min_lag=3, 
+        #         max_lag=3, 
+        #         per_env=False,
+        #         update_period=0)],
+        # )
 
         def __post_init__(self):
-            self.enable_corruption = True
+            self.enable_corruption = False
             self.concatenate_terms = True
 
     # observation groups
