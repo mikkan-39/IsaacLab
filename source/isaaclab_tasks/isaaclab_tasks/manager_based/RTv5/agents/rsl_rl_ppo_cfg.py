@@ -17,8 +17,8 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         # critic_hidden_dims=[150, 75, 30],
         actor_obs_normalization=False,
         critic_obs_normalization=False, 
-        actor_hidden_dims=[512, 256, 128],
-        critic_hidden_dims=[512, 256, 128],
+        actor_hidden_dims=[256, 128, 64],
+        critic_hidden_dims=[256, 128, 64],
         activation="elu",
         # noise_std_type="log",
     )

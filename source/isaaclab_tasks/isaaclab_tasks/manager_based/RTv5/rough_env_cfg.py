@@ -122,7 +122,7 @@ class RTv5Rewards:
 
     speed_cost = RewTerm(
         func=mdp.joint_vel_l2, 
-        weight=-3.0e-3, 
+        weight=-3.0e-4, 
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex])}
     )
 
@@ -147,7 +147,7 @@ class RTv5Rewards:
     # Penalize all joint limits except un-controllable joints and knees.
     dof_limits = RewTerm(
         func=mdp.joint_pos_limits, 
-        weight=-1.0, 
+        weight=-0.3, 
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[
             # controllableJointsRegex.replace(")).*$", "|to_Tibia)).*$")
             controllableJointsRegex

@@ -218,7 +218,7 @@ class ObservationsCfg:
         # )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
+            # noise=GaussianNoiseCfg(mean=0.0, std=0.025, operation="add"),
             # modifiers=[
             #     DelayedObservationCfg(
             #         min_lag=0,
@@ -231,7 +231,7 @@ class ObservationsCfg:
         )
         projected_gravity_t1 = ObsTerm(
             func=mdp.projected_gravity,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
+            # noise=GaussianNoiseCfg(mean=0.0, std=0.025, operation="add"),
             modifiers=[
                 DelayedObservationCfg(
                     min_lag=1,
@@ -248,7 +248,7 @@ class ObservationsCfg:
         gait_phase = ObsTerm(func=gait_phase_obs)
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel, 
-            noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
+            noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"), 
             params={"asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[controllableJointsRegex]
             )},
