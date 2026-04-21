@@ -23,7 +23,7 @@ import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from isaaclab_tasks.manager_based.RTv5.delayed_backlash_action import DelayedBacklashJointPositionActionCfg
 import torch
 
-GAIT_FREQ_RANGE = (1.0, 1.5)  # Hz — per-env random frequency range
+GAIT_FREQ_RANGE = (1.5, 1.5)  # Hz — per-env random frequency range
 
 
 def _get_gait_freq(env) -> torch.Tensor:
@@ -138,23 +138,10 @@ class MySceneCfg(InteractiveSceneCfg):
 class CommandsCfg:
     """Command specifications for the MDP."""
 
-    # base_velocity = mdp.UniformVelocityCommandCfg(
-    #     asset_name="robot",
-    #     resampling_time_range=(10.0, 10.0),
-    #     rel_standing_envs=0.02,
-    #     rel_heading_envs=1.0,
-    #     heading_command=True,
-    #     heading_control_stiffness=1.0,
-    #     debug_vis=False,
-    #     ranges=mdp.UniformVelocityCommandCfg.Ranges(
-    #         lin_vel_x=(0.0, 1.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.3, 0.3), heading=(-math.pi, math.pi)
-    #     ),
-    # )
-
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
-        rel_standing_envs=0.01,
+        rel_standing_envs=0.05,
         heading_command=False,
         debug_vis=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
@@ -176,7 +163,7 @@ class ActionsCfg:
         min_delay_steps=2,
         max_delay_steps=4,
         backlash_deg=1.0,
-        action_noise_std=0.01,
+        action_noise_std=0.0,
         action_lpf_alpha=0.4,
     )
 
@@ -190,33 +177,33 @@ class ObservationsCfg:
         """Observations for policy group."""
 
                 # Accelerometer with gravity (like real IMU)
-        # base_lin_acc = ObsTerm(
-        #     func=mdp.base_lin_acc_with_gravity,
-        #     noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
-        #     params={"gravity_bias": (0.0, 0.0, 9.81)},
-        #     # modifiers=[
-        #     #     DelayedObservationCfg(
-        #     #         min_lag=0,
-        #     #         max_lag=3,
-        #     #         per_env=True,
-        #     #         hold_prob=0.9,
-        #     #         update_period=0,
-        #     #     )
-        #     # ],
-        # )
-        # base_ang_vel = ObsTerm(
-        #     func=mdp.base_ang_vel,
-        #     noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"),
-        #     # modifiers=[
-        #     #     DelayedObservationCfg(
-        #     #         min_lag=0,
-        #     #         max_lag=3,
-        #     #         per_env=True,
-        #     #         hold_prob=0.9,
-        #     #         update_period=0,
-        #     #     )
-        #     # ],
-        # )
+        base_lin_acc = ObsTerm(
+            func=mdp.base_lin_acc_with_gravity,
+            noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"),
+            params={"gravity_bias": (0.0, 0.0, 9.81)},
+            # modifiers=[
+            #     DelayedObservationCfg(
+            #         min_lag=0,
+            #         max_lag=3,
+            #         per_env=True,
+            #         hold_prob=0.9,
+            #         update_period=0,
+            #     )
+            # ],
+        )
+        base_ang_vel = ObsTerm(
+            func=mdp.base_ang_vel,
+            noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"),
+            # modifiers=[
+            #     DelayedObservationCfg(
+            #         min_lag=0,
+            #         max_lag=3,
+            #         per_env=True,
+            #         hold_prob=0.9,
+            #         update_period=0,
+            #     )
+            # ],
+        )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
             # noise=GaussianNoiseCfg(mean=0.0, std=0.025, operation="add"),
@@ -230,18 +217,18 @@ class ObservationsCfg:
             #     )
             # ],
         )
-        projected_gravity_t1 = ObsTerm(
-            func=mdp.projected_gravity,
-            # noise=GaussianNoiseCfg(mean=0.0, std=0.025, operation="add"),
-            modifiers=[
-                DelayedObservationCfg(
-                    min_lag=1,
-                    max_lag=1,
-                    per_env=False,
-                    update_period=0,
-                )
-            ],
-        )
+        # projected_gravity_t1 = ObsTerm(
+        #     func=mdp.projected_gravity,
+        #     # noise=GaussianNoiseCfg(mean=0.0, std=0.025, operation="add"),
+        #     modifiers=[
+        #         DelayedObservationCfg(
+        #             min_lag=1,
+        #             max_lag=1,
+        #             per_env=False,
+        #             update_period=0,
+        #         )
+        #     ],
+        # )
         velocity_commands = ObsTerm(
             func=mdp.generated_commands, 
             params={"command_name": "base_velocity"}
@@ -249,7 +236,7 @@ class ObservationsCfg:
         gait_phase = ObsTerm(func=gait_phase_obs)
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel, 
-            noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"), 
+            noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"), 
             params={"asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[controllableJointsRegex]
             )},
@@ -263,18 +250,18 @@ class ObservationsCfg:
             #     )
             # ],
         )
-        # joint_pos_t1 = ObsTerm(
-        #     func=mdp.joint_pos_rel, 
-        #     noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
-        #     params={"asset_cfg": SceneEntityCfg(
-        #         "robot", joint_names=[controllableJointsRegex]
-        #     )},
-        #     modifiers=[DelayedObservationCfg(
-        #         min_lag=1, 
-        #         max_lag=1, 
-        #         per_env=False,
-        #         update_period=0)],
-        # )
+        joint_pos_t1 = ObsTerm(
+            func=mdp.joint_pos_rel, 
+            noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
+            params={"asset_cfg": SceneEntityCfg(
+                "robot", joint_names=[controllableJointsRegex]
+            )},
+            modifiers=[DelayedObservationCfg(
+                min_lag=1, 
+                max_lag=1, 
+                per_env=False,
+                update_period=0)],
+        )
         # joint_vel = ObsTerm(
         #     func=mdp.joint_vel_rel, 
         #     noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"), 
@@ -355,7 +342,7 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
-            "mass_distribution_params": (0.85, 1.15),
+            "mass_distribution_params": (0.75, 1.25),
             "operation": "scale",
         },
     )

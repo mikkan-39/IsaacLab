@@ -11,8 +11,6 @@ from .velocity_env_cfg import LocomotionVelocityRoughEnvCfg, controllableJointsR
 
 from isaaclab_assets import RT_CFG 
 
-step_reward_scale = 3.0
-
 @configclass
 class RTv5Rewards:
     alive_reward = RewTerm(func=mdp.is_alive, weight=0.5)
@@ -20,7 +18,7 @@ class RTv5Rewards:
 
     track_lin_vel = RewTerm(
         func=mdp.track_lin_vel_xy_yaw_frame_exp,
-        weight=1.0, 
+        weight=2.0, 
         params={"command_name": "base_velocity", "std": 0.15},
     )
     track_ang_vel = RewTerm(
@@ -29,14 +27,15 @@ class RTv5Rewards:
         params={"command_name": "base_velocity", "std": 0.5}
     )
 
-    # stand_still = RewTerm(
-    #     func=mdp.stand_still_joint_deviation_l1,
-    #     weight=-0.4,
-    #     params={
-    #         "command_name": "base_velocity",
-    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-    #     },
-    # )
+    stand_still = RewTerm(
+        func=mdp.stand_still_joint_deviation_l1,
+        weight=-0.4,
+        params={
+            "command_name": "base_velocity",
+            "command_threshold": 0.02,
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+        },
+    )
 
     gait_contact = RewTerm(
         func=mdp.contact_gating_reward,
@@ -120,14 +119,14 @@ class RTv5Rewards:
     #         "asset_cfg_b": SceneEntityCfg("robot", joint_names=[".*to_HipL.*"])
     #         })
 
-    # undesired_contacts = RewTerm(
-    #     func=mdp.undesired_contacts,
-    #     weight=-0.1,
-    #     params={
-    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
-    #         "threshold": 1.0,
-    #     },
-    # )
+    undesired_contacts = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-0.1,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
+            "threshold": 1.0,
+        },
+    )
 
     speed_cost = RewTerm(
         func=mdp.joint_vel_l2, 
@@ -156,10 +155,18 @@ class RTv5Rewards:
     # Penalize all joint limits except un-controllable joints and knees.
     dof_limits = RewTerm(
         func=mdp.joint_pos_limits, 
-        weight=-0.3, 
+        weight=-1.0, 
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[
             # controllableJointsRegex.replace(")).*$", "|to_Tibia)).*$")
             controllableJointsRegex
+        ])},
+    )
+
+    dof_limits_knees = RewTerm(
+        func=mdp.joint_pos_limits, 
+        weight=-5.0, 
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[
+            ".*to_Tibia.*"
         ])},
     )
 

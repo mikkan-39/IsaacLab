@@ -32,20 +32,21 @@ MINI_ROUGH_TERRAINS_CFG = TerrainGeneratorCfg(
         #     holes=False,
         # ),
         "flat": terrain_gen.MeshPlaneTerrainCfg(),
-        # "flat2": terrain_gen.MeshPlaneTerrainCfg(),
-        # "flat3": terrain_gen.MeshPlaneTerrainCfg(),
+        "flat2": terrain_gen.MeshPlaneTerrainCfg(),
+        "flat3": terrain_gen.MeshPlaneTerrainCfg(),
+        "flat4": terrain_gen.MeshPlaneTerrainCfg(),
         # "boxes": terrain_gen.MeshRandomGridTerrainCfg(
         #     grid_width=0.45, grid_height_range=(0.0, 0.025), platform_width=1.0
         # ),
         "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
             noise_range=(0.0, 0.02), noise_step=0.005, border_width=0.25, horizontal_scale=1.0
         ),
-        "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
-            slope_range=(0.0, 0.05), platform_width=1.0, border_width=0.25
-        ),
-        "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
-            slope_range=(0.0, 0.05), platform_width=1.0, border_width=0.25
-        ),
+        # "hf_pyramid_slope_inv": terrain_gen.HfInvertedPyramidSlopedTerrainCfg(
+        #     slope_range=(0.0, 0.05), platform_width=1.0, border_width=0.25
+        # ),
+        # "hf_pyramid_slope": terrain_gen.HfPyramidSlopedTerrainCfg(
+        #     slope_range=(0.0, 0.05), platform_width=1.0, border_width=0.25
+        # ),
     },
 )
 """Rough terrains configuration."""
