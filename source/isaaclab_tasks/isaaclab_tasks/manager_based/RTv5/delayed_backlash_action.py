@@ -33,6 +33,10 @@ class DelayedBacklashJointPositionAction(JointPositionAction):
     **Action noise** – Gaussian noise (in radians) added *after* backlash filtering
     and *before* entering the delay buffer, modelling servo positioning jitter.
 
+    **Action LPF** – Optional exponential smoothing on *raw* policy actions before
+    joint scaling: ``a_t = (1-α)*a_{t-1} + α*a_raw``.  ``action_lpf_alpha=1.0`` disables
+    filtering (default).
+
     The ``processed_actions`` property still returns the un-delayed, un-backlashed
     value (what the policy intended) so that observation terms like ``last_action``
     and penalties like ``action_rate_l2`` remain correct.
@@ -62,8 +66,17 @@ class DelayedBacklashJointPositionAction(JointPositionAction):
         self._noise_std = cfg.action_noise_std
         self._env_arange = torch.arange(self.num_envs, device=self.device)
 
+        self._lpf_alpha = float(cfg.action_lpf_alpha)
+        self._lpf_state = torch.zeros(self.num_envs, self.action_dim, device=self.device)
+
     def process_actions(self, actions: torch.Tensor):
-        super().process_actions(actions)
+        if self._lpf_alpha >= 1.0 - 1e-9:
+            filtered = actions
+        else:
+            one_m = 1.0 - self._lpf_alpha
+            self._lpf_state.mul_(one_m).add_(actions, alpha=self._lpf_alpha)
+            filtered = self._lpf_state
+        super().process_actions(filtered)
 
         target = self._processed_actions
 
@@ -116,6 +129,7 @@ class DelayedBacklashJointPositionAction(JointPositionAction):
             self.cfg.min_delay_steps, self.cfg.max_delay_steps + 1,
             (n,), device=self.device,
         )
+        self._lpf_state[env_ids] = 0.0
 
 
 @configclass
@@ -137,3 +151,7 @@ class DelayedBacklashJointPositionActionCfg(JointPositionActionCfg):
     action_noise_std: float = 0.0
     """Gaussian noise std (radians) added to the commanded joint position.
     Set to ~0.01 for ~0.6 deg positioning jitter typical of bus servos."""
+
+    action_lpf_alpha: float = 1.0
+    """EMA weight on *new* raw actions: ``a_t = (1-α)*a_{t-1} + α*a_raw``.
+    ``1.0`` = no filtering (default). ``0.2`` matches ``a_t = 0.8*a_{t-1} + 0.2*a_raw``."""

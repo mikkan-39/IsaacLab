@@ -177,6 +177,7 @@ class ActionsCfg:
         max_delay_steps=4,
         backlash_deg=1.0,
         action_noise_std=0.01,
+        action_lpf_alpha=0.4,
     )
 
 
@@ -341,8 +342,8 @@ class EventCfg:
                 "x": (-0.0, 0.0),
                 "y": (-0.0, 0.0),
                 "z": (-0.0, 0.0),
-                "roll": (-0.0, -0.0),
-                "pitch": (-0.0, -0.0),
+                "roll": (-0.1, -0.1),
+                "pitch": (-0.1, -0.1),
                 "yaw": (-0.0, -0.0),
             },
         },

@@ -120,6 +120,15 @@ class RTv5Rewards:
     #         "asset_cfg_b": SceneEntityCfg("robot", joint_names=[".*to_HipL.*"])
     #         })
 
+    # undesired_contacts = RewTerm(
+    #     func=mdp.undesired_contacts,
+    #     weight=-0.1,
+    #     params={
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
+    #         "threshold": 1.0,
+    #     },
+    # )
+
     speed_cost = RewTerm(
         func=mdp.joint_vel_l2, 
         weight=-3.0e-4, 
