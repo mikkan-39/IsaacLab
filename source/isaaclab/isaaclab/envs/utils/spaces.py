@@ -196,10 +196,18 @@ def replace_env_cfg_spaces_with_strings(env_cfg: object) -> object:
     """
     for attr in ["observation_space", "action_space", "state_space"]:
         if hasattr(env_cfg, attr):
-            setattr(env_cfg, attr, serialize_space(getattr(env_cfg, attr)))
+            val = getattr(env_cfg, attr)
+            if val is not None:
+                setattr(env_cfg, attr, serialize_space(val))
     for attr in ["observation_spaces", "action_spaces"]:
         if hasattr(env_cfg, attr):
-            setattr(env_cfg, attr, {k: serialize_space(v) for k, v in getattr(env_cfg, attr).items()})
+            d = getattr(env_cfg, attr)
+            if d is not None:
+                setattr(
+                    env_cfg,
+                    attr,
+                    {k: serialize_space(v) if v is not None else None for k, v in d.items()},
+                )
     return env_cfg
 
 
@@ -214,8 +222,16 @@ def replace_strings_with_env_cfg_spaces(env_cfg: object) -> object:
     """
     for attr in ["observation_space", "action_space", "state_space"]:
         if hasattr(env_cfg, attr):
-            setattr(env_cfg, attr, deserialize_space(getattr(env_cfg, attr)))
+            val = getattr(env_cfg, attr)
+            if val is not None:
+                setattr(env_cfg, attr, deserialize_space(val))
     for attr in ["observation_spaces", "action_spaces"]:
         if hasattr(env_cfg, attr):
-            setattr(env_cfg, attr, {k: deserialize_space(v) for k, v in getattr(env_cfg, attr).items()})
+            d = getattr(env_cfg, attr)
+            if d is not None:
+                setattr(
+                    env_cfg,
+                    attr,
+                    {k: deserialize_space(v) if v is not None else None for k, v in d.items()},
+                )
     return env_cfg
