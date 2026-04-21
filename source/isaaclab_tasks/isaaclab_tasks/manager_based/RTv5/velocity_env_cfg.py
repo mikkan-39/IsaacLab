@@ -236,7 +236,7 @@ class ObservationsCfg:
         gait_phase = ObsTerm(func=gait_phase_obs)
         joint_pos = ObsTerm(
             func=mdp.joint_pos_rel, 
-            noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"), 
+            # noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"), 
             params={"asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[controllableJointsRegex]
             )},
@@ -252,7 +252,7 @@ class ObservationsCfg:
         )
         joint_pos_t1 = ObsTerm(
             func=mdp.joint_pos_rel, 
-            noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
+            # noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
             params={"asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[controllableJointsRegex]
             )},
