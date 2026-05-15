@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import os
+
 import isaaclab.sim as sim_utils
-from isaaclab.actuators import DCMotorCfg, ImplicitActuatorCfg
+from isaaclab.actuators import DCMotorCfg, ImplicitActuatorCfg, ActuatorNetLSTMCfg, ActuatorNetMLPCfg
 from isaaclab_assets.actuators import BacklashDCMotorCfg
 from isaaclab.assets import ArticulationCfg
 
+# Next to this file: ../actuators/actuator_lstm.pt (not under isaaclab/).
+_ACTUATOR_LSTM_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "actuators", "actuator_lstm.pt"))
+_ACTUATOR_MLP_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "actuators", "actuator_mlp.pt"))
+SEQ_LEN = 20
 ##
 # Configuration
 ##
@@ -80,8 +86,8 @@ RT_CFG = ArticulationCfg(
         "ST3215-HS": DCMotorCfg(
             # joint_names_expr=["^(?!.*FootJoint).*"],
             joint_names_expr=[".*"],
-            stiffness=12.0,
-            damping=2.5,
+            stiffness=28.1,
+            damping=1.7,
             armature=0.01,
             saturation_effort=1.96,
             effort_limit=1.96,
@@ -89,7 +95,30 @@ RT_CFG = ArticulationCfg(
             velocity_limit=11.1,
             velocity_limit_sim=11.1,
         ),
-        # "ST3215-HS-Feet": DCMotorCfg(
+        # "ST3215-HS": ActuatorNetLSTMCfg(
+        #     joint_names_expr=[".*"],
+        #     network_file=_ACTUATOR_LSTM_PATH,
+        #     saturation_effort=1.96,
+        #     effort_limit=1.96,
+        #     effort_limit_sim=1.96,
+        #     velocity_limit=11.1,
+        #     velocity_limit_sim=11.1,
+        # )
+        # "ST3215-HS": ActuatorNetMLPCfg(
+        #     joint_names_expr=[".*"],
+        #     network_file=_ACTUATOR_MLP_PATH,
+        #     pos_scale=1.0,
+        #     vel_scale=1.0,
+        #     torque_scale=1.0,
+        #     input_order="pos_vel",
+        #     input_idx=list(range(SEQ_LEN)),
+        #     effort_limit=20.0,  # taken from spec sheet
+        #     effort_limit_sim=20.0,
+        #     velocity_limit=11.1,  # taken from spec sheet
+        #     velocity_limit_sim=11.1,
+        #     saturation_effort=20.0,  # same as effort limit
+        # )
+        # "ST3215-HS-Feet": DCMoto  rCfg(
         #     joint_names_expr=[".*FootJoint.*"],
         #     stiffness=12.0,
         #     damping=2.5,

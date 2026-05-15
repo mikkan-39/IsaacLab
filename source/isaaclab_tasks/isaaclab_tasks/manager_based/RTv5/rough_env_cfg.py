@@ -18,7 +18,7 @@ class RTv5Rewards:
 
     track_lin_vel = RewTerm(
         func=mdp.track_lin_vel_xy_yaw_frame_exp,
-        weight=2.0, 
+        weight=1.0, 
         params={"command_name": "base_velocity", "std": 0.15},
     )
     track_ang_vel = RewTerm(
@@ -75,13 +75,13 @@ class RTv5Rewards:
     
     base_pos = RewTerm(
         func=mdp.flat_orientation_l2, 
-        weight=-1.0, 
+        weight=-3.0, 
         params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
     )
 
     base_ang_vel = RewTerm(
         func=mdp.ang_vel_xy_l2, 
-        weight=-0.05, 
+        weight=-0.25, 
         params={"asset_cfg": SceneEntityCfg("robot", body_names=".*base.*")}
     )
 
@@ -182,7 +182,7 @@ class RTv5Rewards:
     )
 
     joint_deviation_hip_spread = RewTerm(
-        func=mdp.joint_same_direction_deviation_penalty,
+        func=mdp.joint_deviation_l1,
         weight=-0.2,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_to_HipBulk.*"])},
     )
