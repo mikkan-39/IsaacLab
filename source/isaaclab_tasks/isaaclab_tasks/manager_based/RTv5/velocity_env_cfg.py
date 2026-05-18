@@ -260,22 +260,22 @@ class ObservationsCfg:
         # may be worth considering,
         # because RT has more DoF than Bimo and benefits from proprioception,
         # provided the *modelled* readback matches what the real bus provides.
-        # joint_pos = ObsTerm(
-        #     func=mdp.joint_pos_rel,
-        #     noise=GaussianNoiseCfg(mean=0.0, std=0.003, operation="add"),
-        #     params={"asset_cfg": SceneEntityCfg(
-        #         "robot", joint_names=[controllableJointsRegex]
-        #     )},
-        #     modifiers=[
-        #         DelayedObservationCfg(
-        #             min_lag=0,
-        #             max_lag=2,
-        #             per_env=True,
-        #             hold_prob=0.5,
-        #             update_period=1,
-        #         )
-        #     ],
-        # )
+        joint_pos = ObsTerm(
+            func=mdp.joint_pos_rel,
+            noise=GaussianNoiseCfg(mean=0.0, std=0.003, operation="add"),
+            params={"asset_cfg": SceneEntityCfg(
+                "robot", joint_names=[controllableJointsRegex]
+            )},
+            modifiers=[
+                DelayedObservationCfg(
+                    min_lag=0,
+                    max_lag=2,
+                    per_env=True,
+                    hold_prob=0.5,
+                    update_period=1,
+                )
+            ],
+        )
         actions = ObsTerm(func=mdp.last_action)
 
         def __post_init__(self):
