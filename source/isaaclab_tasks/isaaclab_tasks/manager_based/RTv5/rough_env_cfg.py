@@ -104,10 +104,16 @@ class RTv5Rewards:
     #     },
     # )
 
+    # Tier-2 #4 (companion): with delta-mode actions the raw policy output now
+    # represents a per-step *delta*, not an absolute target. A unit raw action
+    # is +0.05 rad of integrated movement per step, so the meaningful action
+    # range is roughly [-3, 3] sigmas with init_noise_std=1.0. Penalize only
+    # gross out-of-distribution deltas; the integrator clamps to soft joint
+    # limits anyway, so this is mostly a regularizer against policy drift.
     action_clip_violation = RewTerm(
         func=mdp.action_clip_violation,
         weight=-0.5,
-        params={"clip_min": -1.57, "clip_max": 1.57},
+        params={"clip_min": -3.0, "clip_max": 3.0},
     )
 
     # hip_vel_same_sign = RewTerm(
@@ -274,7 +280,14 @@ class RTv5RoughEnvCfg(LocomotionVelocityRoughEnvCfg):
     def __post_init__(self):
         super().__post_init__()
 
-        self.scene.robot = RT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot") # type: ignore
-
-        # Randomization
-        pass
+        # Tier-3 #9: bump position-iteration count for the robot articulation.
+        # Default solver_position_iteration_count=4 under-resolves edge contacts
+        # on thin printed feet, which lets the policy learn "sticky" foot
+        # behaviour that doesn't transfer. 8 is the same value Bimo uses and
+        # roughly doubles the per-step cost on the robot (negligible at scale).
+        robot_cfg = RT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")  # type: ignore
+        robot_cfg.spawn.articulation_props.solver_position_iteration_count = 8
+        # Already True in the asset; explicit here so future asset edits don't
+        # silently disable self-collisions for the legs/arms during swing.
+        robot_cfg.spawn.articulation_props.enabled_self_collisions = True
+        self.scene.robot = robot_cfg

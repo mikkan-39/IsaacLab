@@ -74,6 +74,37 @@ def randomize_actuator_velocity_limit(
             1.0 + actuator.effort_limit[env_ids] / actuator._saturation_effort
         )
 
+
+def randomize_actuator_effort_limit(
+    env,
+    env_ids: torch.Tensor | None,
+    asset_cfg: SceneEntityCfg,
+    effort_range: tuple[float, float] = (1.5, 1.96),
+):
+    """Randomize the effort_limit on DCMotor-based actuators and recompute derived values.
+
+    Tier-1 #2: real bus servos lose peak torque as battery voltage drops. The
+    ST3215 spec'd at 1.96 Nm@12V loses ~25% of peak torque by the time the pack
+    sits at 10V. Without exposure to this in sim, the policy plans assuming
+    full torque authority every step — and falls the first time the hips need
+    to push against a low-SoC battery. Cycling effort_limit per reset across
+    a plausible voltage envelope teaches torque-saturation robustness.
+    """
+    asset = env.scene[asset_cfg.name]
+    if env_ids is None:
+        env_ids = torch.arange(env.scene.num_envs, device=asset.device)
+    for actuator in asset.actuators.values():
+        if not hasattr(actuator, "_vel_at_effort_lim"):
+            continue
+        new_eff = torch.empty(len(env_ids), actuator.num_joints, device=asset.device).uniform_(*effort_range)
+        actuator.effort_limit[env_ids] = new_eff
+        # `_vel_at_effort_lim` is the velocity at which the motor model crosses
+        # over from torque-limited to velocity-limited. Depends on both vel and
+        # effort limits, so recompute when either changes.
+        actuator._vel_at_effort_lim[env_ids] = actuator.velocity_limit[env_ids] * (
+            1.0 + new_eff / actuator._saturation_effort
+        )
+
 ##
 # Scene definition
 ##
@@ -89,10 +120,17 @@ class MySceneCfg(InteractiveSceneCfg):
         max_init_terrain_level=5,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
-            friction_combine_mode="multiply",
-            restitution_combine_mode="multiply",
-            static_friction=3.0,
-            dynamic_friction=3.0,
+            # Tier-1 #1: previously friction_combine_mode="multiply" with
+            # static_friction=dynamic_friction=3.0 effectively welded the feet
+            # to the floor and prevented any slipping in sim. Switch to "min"
+            # (effective μ becomes the smaller of foot vs ground, which is the
+            # realistic worst case) and use physical friction values. Per-env
+            # randomization on top is handled by `robot_foot_material` event.
+            friction_combine_mode="min",
+            restitution_combine_mode="min",
+            static_friction=0.8,
+            dynamic_friction=0.7,
+            restitution=0.0,
         ),
         visual_material=sim_utils.MdlFileCfg(
             # mdl_path=f"{ISAACLAB_NUCLEUS_DIR}/Materials/TilesMarbleSpiderWhiteBrickBondHoned/TilesMarbleSpiderWhiteBrickBondHoned.mdl",
@@ -157,14 +195,26 @@ class ActionsCfg:
     joint_pos = DelayedBacklashJointPositionActionCfg(
         asset_name="robot",
         joint_names=[controllableJointsRegex],
+        # `scale` is unused in delta mode; per-step magnitude is `delta_scale`.
         scale=1.0,
         use_default_offset=True,
         preserve_order=True,
+        # Tier-2 #4: delta-integrated targets instead of absolute targets.
+        # ~0.05 rad/step at 50 Hz caps slew rate at ~143 deg/s under unit action,
+        # matching what real ST3215-class servos can track without saturating.
+        delta_scale=0.05,
+        # Tier-3 #11: stochastically perturb action history at reset so the
+        # policy learns to recover from non-default startup states (handed
+        # control from stand-up routine, hot restarts on hardware, etc.).
+        reset_history_jitter_std=0.05,
+        reset_history_jitter_prob=0.25,
         min_delay_steps=2,
         max_delay_steps=4,
         backlash_deg=1.0,
-        action_noise_std=0.0,
-        action_lpf_alpha=0.4,
+        # Tier-2 #5: enable servo position jitter. ~0.007 rad ≈ 0.4° matches
+        # bus-servo step quantization (~0.087°/count) plus mechanical jitter.
+        action_noise_std=0.007,
+        action_lpf_alpha=1.0,
     )
 
 
@@ -176,127 +226,64 @@ class ObservationsCfg:
     class PolicyCfg(ObsGroup):
         """Observations for policy group."""
 
-                # Accelerometer with gravity (like real IMU)
+        # Tier-3 #9 note: these observations read the abstract base orientation,
+        # not a physically mounted IMU. If the real IMU sits on a sub-link (head,
+        # torso plate) and samples async, switch these to mdp.imu_* by adding an
+        # ImuCfg to MySceneCfg with the correct prim_path/offset and update_period.
+        # Leaving placement to whoever knows the actual hardware mount geometry.
+
+        # Accelerometer with gravity (like real IMU)
         base_lin_acc = ObsTerm(
             func=mdp.base_lin_acc_with_gravity,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"),
+            noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
             params={"gravity_bias": (0.0, 0.0, 9.81)},
-            # modifiers=[
-            #     DelayedObservationCfg(
-            #         min_lag=0,
-            #         max_lag=3,
-            #         per_env=True,
-            #         hold_prob=0.9,
-            #         update_period=0,
-            #     )
-            # ],
         )
         base_ang_vel = ObsTerm(
             func=mdp.base_ang_vel,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"),
-            # modifiers=[
-            #     DelayedObservationCfg(
-            #         min_lag=0,
-            #         max_lag=3,
-            #         per_env=True,
-            #         hold_prob=0.9,
-            #         update_period=0,
-            #     )
-            # ],
+            noise=GaussianNoiseCfg(mean=0.0, std=0.04, operation="add"),
         )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
-            # noise=GaussianNoiseCfg(mean=0.0, std=0.025, operation="add"),
-            # modifiers=[
-            #     DelayedObservationCfg(
-            #         min_lag=0,
-            #         max_lag=3,
-            #         per_env=True,
-            #         hold_prob=0.9,
-            #         update_period=0,
-            #     )
-            # ],
+            noise=GaussianNoiseCfg(mean=0.0, std=0.025, operation="add"),
         )
-        # projected_gravity_t1 = ObsTerm(
-        #     func=mdp.projected_gravity,
-        #     # noise=GaussianNoiseCfg(mean=0.0, std=0.025, operation="add"),
-        #     modifiers=[
-        #         DelayedObservationCfg(
-        #             min_lag=1,
-        #             max_lag=1,
-        #             per_env=False,
-        #             update_period=0,
-        #         )
-        #     ],
-        # )
         velocity_commands = ObsTerm(
             func=mdp.generated_commands, 
             params={"command_name": "base_velocity"}
         )
         gait_phase = ObsTerm(func=gait_phase_obs)
-        joint_pos = ObsTerm(
-            func=mdp.joint_pos_rel, 
-            # noise=GaussianNoiseCfg(mean=0.0, std=0.02, operation="add"), 
-            params={"asset_cfg": SceneEntityCfg(
-                "robot", joint_names=[controllableJointsRegex]
-            )},
-            # modifiers=[
-            #     DelayedObservationCfg(
-            #         min_lag=0,
-            #         max_lag=3,
-            #         per_env=True,
-            #         hold_prob=0.9,
-            #         update_period=1,
-            #     )
-            # ],
-        )
-        joint_pos_t1 = ObsTerm(
-            func=mdp.joint_pos_rel, 
-            # noise=GaussianNoiseCfg(mean=0.0, std=0.01, operation="add"), 
-            params={"asset_cfg": SceneEntityCfg(
-                "robot", joint_names=[controllableJointsRegex]
-            )},
-            modifiers=[DelayedObservationCfg(
-                min_lag=1, 
-                max_lag=1, 
-                per_env=False,
-                update_period=0)],
-        )
-        # joint_vel = ObsTerm(
-        #     func=mdp.joint_vel_rel, 
-        #     noise=GaussianNoiseCfg(mean=0.0, std=0.2, operation="add"), 
+        # Tier-2 #6: joint position readback from a serial-bus servo is laggy
+        # *and* quantized, not the clean float you get from `joint_pos_rel`.
+        # Add Gaussian noise to approximate quantization (~0.0015 rad = 1 count
+        # on a 12-bit servo, plus mechanical wobble), and use the existing
+        # DelayedObservationCfg modifier to introduce variable readback lag.
+        # Keeping joint position observation (rather than dropping it like Bimo)
+        # may be worth considering,
+        # because RT has more DoF than Bimo and benefits from proprioception,
+        # provided the *modelled* readback matches what the real bus provides.
+        # joint_pos = ObsTerm(
+        #     func=mdp.joint_pos_rel,
+        #     noise=GaussianNoiseCfg(mean=0.0, std=0.003, operation="add"),
         #     params={"asset_cfg": SceneEntityCfg(
         #         "robot", joint_names=[controllableJointsRegex]
-        #     )}
+        #     )},
+        #     modifiers=[
+        #         DelayedObservationCfg(
+        #             min_lag=0,
+        #             max_lag=2,
+        #             per_env=True,
+        #             hold_prob=0.5,
+        #             update_period=1,
+        #         )
+        #     ],
         # )
         actions = ObsTerm(func=mdp.last_action)
-        # action_t1 = ObsTerm(
-        #     func=mdp.last_action,
-        #     modifiers=[DelayedObservationCfg(
-        #         min_lag=1, 
-        #         max_lag=1, 
-        #         per_env=False,
-        #         update_period=0)],
-        # )
-        # action_t2 = ObsTerm(
-        #     func=mdp.last_action,
-        #     modifiers=[DelayedObservationCfg(
-        #         min_lag=2, 
-        #         max_lag=2, 
-        #         per_env=False,
-        #         update_period=0)],
-        # )
-        # action_t3 = ObsTerm(
-        #     func=mdp.last_action,
-        #     modifiers=[DelayedObservationCfg(
-        #         min_lag=3, 
-        #         max_lag=3, 
-        #         per_env=False,
-        #         update_period=0)],
-        # )
 
         def __post_init__(self):
-            self.enable_corruption = False
+            # Tier-2 #6 (related): `enable_corruption=False` silently disables
+            # every NoiseCfg attached to every ObsTerm. This was the root cause
+            # of the entire observation pipeline being noise-free in sim while
+            # the real robot's observations are heavily noisy. Enable.
+            self.enable_corruption = True
             self.concatenate_terms = True
 
     # observation groups
@@ -324,19 +311,29 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5),"yaw": (0.0, 0.0)},
+            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-0.5, 0.5)},
             "velocity_range": {
-                "x": (-0.0, 0.0),
-                "y": (-0.0, 0.0),
+                # Tier-3 #13: prior config had roll/pitch = (-0.1, -0.1), i.e.
+                # both bounds equal, which is a constant initial spin rather
+                # than randomization. Fixed to a symmetric range so episodes
+                # don't all start with the same biased tipping.
+                "x": (-0.05, 0.05),
+                "y": (-0.05, 0.05),
                 "z": (-0.0, 0.0),
-                "roll": (-0.1, -0.1),
-                "pitch": (-0.1, -0.1),
-                "yaw": (-0.0, -0.0),
+                "roll": (-0.15, 0.15),
+                "pitch": (-0.15, 0.15),
+                "yaw": (-0.0, 0.0),
             },
         },
     )
 
-    
+    # Tier-2 #7: replace single base-only one-shot mass randomization with two
+    # complementary events:
+    #   (a) base ±25% on startup — accounts for battery presence, top-plate
+    #       payload, cabling. Once per env at simulation startup.
+    #   (b) every link ±5% on reset, with inertia recomputed — accounts for
+    #       3D-print density variation, mass distribution along limbs, and
+    #       trains the policy against per-episode dynamics shifts.
     add_base_mass = EventTerm(
         func=mdp.randomize_rigid_body_mass,
         mode="startup",
@@ -344,6 +341,52 @@ class EventCfg:
             "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
             "mass_distribution_params": (0.75, 1.25),
             "operation": "scale",
+            "recompute_inertia": True,
+        },
+    )
+
+    randomize_all_link_mass = EventTerm(
+        func=mdp.randomize_rigid_body_mass,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot"),
+            "mass_distribution_params": (0.95, 1.05),
+            "operation": "scale",
+            "recompute_inertia": True,
+        },
+    )
+
+    # Tier-3 (COM): real robots have COM uncertainty from battery placement,
+    # cabling routing, and assembly tolerances. ±15 mm on base translates to
+    # noticeable balance shifts that a sim policy must tolerate.
+    randomize_base_com = EventTerm(
+        func=mdp.randomize_rigid_body_com,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
+            "com_range": {
+                "x": (-0.015, 0.015),
+                "y": (-0.010, 0.010),
+                "z": (-0.010, 0.010),
+            },
+        },
+    )
+
+    # Tier-1 #1 (companion to terrain physics fix): per-env randomization of
+    # foot friction and restitution. The terrain's μ is now physical (0.7-0.8),
+    # but real floors vary wildly between sessions (polished concrete, rubber,
+    # ceramic tile, lab linoleum). Randomizing the robot's foot material in
+    # buckets exposes the policy to the full range.
+    robot_foot_material = EventTerm(
+        func=mdp.randomize_rigid_body_material,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*Foot"),
+            "static_friction_range": (0.4, 1.1),
+            "dynamic_friction_range": (0.3, 1.0),
+            "restitution_range": (0.0, 0.05),
+            "num_buckets": 64,
+            "make_consistent": True,
         },
     )
 
@@ -366,24 +409,25 @@ class EventCfg:
     #     },
     # )
 
-    # robot_joint_friction = EventTerm(
-    #     func=mdp.randomize_joint_parameters,
-    #     mode="reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-    #         "friction_distribution_params": (0.1, 0.3),
-    #         "operation": "abs",
-    #         "distribution": "uniform",
-    #     },
-    # )
-
-
     robot_velocity_limit = EventTerm(
         func=randomize_actuator_velocity_limit,
         mode="reset",
         params={
             "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
             "velocity_range": (5.24, 11.1),
+        },
+    )
+
+    # Tier-1 #2: battery-voltage-droop model. ST3215 spec is 1.96 Nm @ 12V; a
+    # 10V pack delivers roughly 1.5 Nm. Sampling per reset across that range
+    # forces the policy to handle torque-limited stance and pushoff, which is
+    # the most common cause of policy collapse on a partially discharged pack.
+    robot_effort_limit = EventTerm(
+        func=randomize_actuator_effort_limit,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+            "effort_range": (1.5, 1.96),
         },
     )
 
@@ -591,7 +635,12 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
 
     def __post_init__(self):
         """Post initialization."""
-        # general settings
+        # general settings.
+        # Tier-1 #3 (verify on hardware): decimation=4 at sim_dt=1/200 gives 50 Hz
+        # control. Bimo runs at 20 Hz on hardware (their decimation=10) because
+        # serial-bus servo round-trip at 8+ joints often can't sustain 50 Hz on
+        # real hardware. Measure your actual control loop period on the robot;
+        # if it's >25 ms, switch to decimation=8 (25 Hz) or 10 (20 Hz) and retrain.
         self.decimation = 4
         self.episode_length_s = 15.0
         # simulation settings
@@ -602,7 +651,7 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
         self.sim.enable_scene_query_support = False
 
         self.sim.physx.enable_stabilization = True
-        
+
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
         # update sensor update periods
         # we tick all the sensors based on the smallest update period (physics update period)

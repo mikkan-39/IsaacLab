@@ -9,14 +9,23 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     max_iterations = 3000
     save_interval = 50
     experiment_name = "RTv5_rough"
-    # empirical_normalization = True
+    # Tier-3 #14: bake observation normalization stats into the exported policy
+    # so the deployed network receives well-scaled inputs even when the obs
+    # distribution at training time isn't exactly zero-mean unit-var. The
+    # running mean/std are exported as constants in the ONNX graph (rsl_rl
+    # handles this), so the deploy code just feeds raw obs as during training.
+    # CRITICAL: at deployment, replicate every analytic pre-scaling step from
+    # this env exactly (joint pos, ang vel units, gravity-bias convention).
+    # Empirical normalization corrects only the residual scale/bias; it cannot
+    # rescue a unit-mismatch or axis-flip.
+    empirical_normalization = True
     obs_groups = {"policy": ["policy"], "critic": ["policy"]}
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         # actor_hidden_dims=[150, 75, 30],
         # critic_hidden_dims=[150, 75, 30],
-        actor_obs_normalization=False,
-        critic_obs_normalization=False, 
+        actor_obs_normalization=True,
+        critic_obs_normalization=True,
         actor_hidden_dims=[256, 128, 64],
         critic_hidden_dims=[256, 128, 64],
         activation="elu",
