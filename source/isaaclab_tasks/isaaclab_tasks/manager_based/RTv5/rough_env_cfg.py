@@ -47,6 +47,17 @@ class RTv5Rewards:
         },
     )
 
+    feet_clearance = RewTerm(
+        func=mdp.feet_clearance_capped,
+        weight=0.5,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
+            "asset_cfg":  SceneEntityCfg("robot",          body_names=["RightFoot", "LeftFoot"]),
+            "target_height": 0.03,
+            "min_air_time":  0.02,
+        },
+    )
+
     # -- Replaced by gait_contact --
     # feet_air_time = RewTerm(
     #     func=mdp.feet_air_time,
@@ -92,7 +103,7 @@ class RTv5Rewards:
 
     actions_cost_diff = RewTerm(
         func=mdp.action_rate_l2,
-        weight=-0.1,
+        weight=-0.02,
     )
 
     # joint_dir_change = RewTerm(
@@ -125,14 +136,14 @@ class RTv5Rewards:
     #         "asset_cfg_b": SceneEntityCfg("robot", joint_names=[".*to_HipL.*"])
     #         })
 
-    undesired_contacts = RewTerm(
-        func=mdp.undesired_contacts,
-        weight=-0.1,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
-            "threshold": 1.0,
-        },
-    )
+    # undesired_contacts = RewTerm(
+    #     func=mdp.undesired_contacts,
+    #     weight=-0.1,
+    #     params={
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
+    #         "threshold": 1.0,
+    #     },
+    # )
 
     speed_cost = RewTerm(
         func=mdp.joint_vel_l2, 
@@ -195,7 +206,7 @@ class RTv5Rewards:
 
     joint_deviation_hip_rotate = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-0.5,
+        weight=-0.15,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*HipBracket_revolute"])},
     )
 
@@ -207,7 +218,7 @@ class RTv5Rewards:
 
     joint_deviation_feet_main = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-0.2,
+        weight=-0.05,
         params={
             "asset_cfg": SceneEntityCfg(
                 "robot", 

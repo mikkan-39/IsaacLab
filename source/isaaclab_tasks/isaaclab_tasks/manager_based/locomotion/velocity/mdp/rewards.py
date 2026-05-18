@@ -431,6 +431,40 @@ def contact_gating_reward(
 
     return reward * moving
 
+def feet_clearance_capped(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    asset_cfg: SceneEntityCfg,
+    target_height: float = 0.02,
+    min_air_time: float = 0.02,
+) -> torch.Tensor:
+    """Per-foot swing-phase clearance reward, linearly ramped with a hard cap.
+    Per foot:
+        reward = clip(foot_z_above_terrain / target_height, 0, 1) * in_air
+    With the typical setup (alternating gait), exactly one foot is airborne
+    at a time, so the practical per-step max is ~1.0. The hard cap at z =
+    target_height removes any incentive to lift higher than needed, which
+    pairs cleanly with action_rate / torque penalties to discourage hopping.
+    Args:
+        sensor_cfg: contact sensor scoped to the foot bodies.
+        asset_cfg: articulation scoped to the same foot bodies (must list
+            them in the same order as `sensor_cfg.body_ids`; using identical
+            body_names regex guarantees this).
+        target_height: clearance at which a foot earns full reward (meters).
+        min_air_time: ignore physics-contact bouncing shorter than this (s).
+    """
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    asset = env.scene[asset_cfg.name]
+    air_time = contact_sensor.data.current_air_time[:, sensor_cfg.body_ids]
+    in_air = air_time > min_air_time
+    # Z of the foot bodies in world frame, minus env origin Z so we measure
+    # height above the local terrain spawn point rather than absolute world Z.
+    # On flat ground this is exact; on rough terrain it's correct on average
+    # since terrain heights average to 0 around the spawn point.
+    foot_z = asset.data.body_pos_w[:, asset_cfg.body_ids, 2] - env.scene.env_origins[:, 2:3]
+    clearance = torch.clamp(foot_z / target_height, min=0.0, max=1.0)
+    return (clearance * in_air.float()).sum(dim=1)
+
 
 def joint_power_l1(
     env: ManagerBasedRLEnv,
