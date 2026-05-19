@@ -19,15 +19,16 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     # Empirical normalization corrects only the residual scale/bias; it cannot
     # rescue a unit-mismatch or axis-flip.
     empirical_normalization = True
+    # fp16 = True 
     obs_groups = {"policy": ["policy"], "critic": ["policy"]}
     policy = RslRlPpoActorCriticCfg(
         init_noise_std=1.0,
         # actor_hidden_dims=[150, 75, 30],
         # critic_hidden_dims=[150, 75, 30],
         actor_obs_normalization=True,
-        critic_obs_normalization=True,
-        actor_hidden_dims=[256, 128, 64],
-        critic_hidden_dims=[256, 128, 64],
+        critic_obs_normalization=False,
+        actor_hidden_dims=[512, 256, 128],
+        critic_hidden_dims=[512, 256, 128],
         activation="elu",
         # noise_std_type="log",
     )
@@ -35,7 +36,7 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        entropy_coef=0.000,
+        entropy_coef=0.005,
         num_learning_epochs=10,
         num_mini_batches=8,
         # learning_rate=1.0e-4,

@@ -101,10 +101,10 @@ class RTv5Rewards:
     #     weight=-0.001, 
     # )
 
-    actions_cost_diff = RewTerm(
-        func=mdp.action_rate_l2,
-        weight=-0.02,
-    )
+    # actions_cost_diff = RewTerm(
+    #     func=mdp.action_rate_l2,
+    #     weight=-0.02,
+    # )
 
     # joint_dir_change = RewTerm(
     #     func=mdp.joint_direction_change_penalty,
@@ -145,23 +145,23 @@ class RTv5Rewards:
     #     },
     # )
 
-    speed_cost = RewTerm(
-        func=mdp.joint_vel_l2, 
-        weight=-3.0e-4, 
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex])}
-    )
+    # speed_cost = RewTerm(
+    #     func=mdp.joint_vel_l2, 
+    #     weight=-3.0e-4, 
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex])}
+    # )
 
-    torque_cost = RewTerm(
-        func=mdp.joint_torques, 
-        weight=-1.5e-5, 
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex])}
-    )
+    # torque_cost = RewTerm(
+    #     func=mdp.joint_torques, 
+    #     weight=-1.5e-5, 
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex])}
+    # )
 
-    torque_cost_feet = RewTerm(
-        func=mdp.joint_torques, 
-        weight=-5.0e-4, 
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*FootJoint.*"])}
-    )
+    # torque_cost_feet = RewTerm(
+    #     func=mdp.joint_torques, 
+    #     weight=-5.0e-4, 
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*FootJoint.*"])}
+    # )
 
     # power_cost = RewTerm(
     #     func=mdp.joint_power_l1,
@@ -254,35 +254,6 @@ class RTv5Rewards:
             )
         },
     )
-
-@configclass
-class RTv5RewardsShitty:
-    # -- task
-    alive_reward = RewTerm(func=mdp.is_alive, weight=1.0) # Maybe?
-    track_lin_vel_xy_exp = RewTerm(
-        func=mdp.track_lin_vel_xy_exp, weight=50.0, params={"command_name": "base_velocity", "std": 0.25}
-    )
-    track_ang_vel_z_exp = RewTerm(
-        func=mdp.track_ang_vel_z_exp, weight=1.0, params={"command_name": "base_velocity", "std": 0.25}
-    )
-    # -- penalties
-    termination_penalty = RewTerm(func=mdp.is_terminated, weight=-200.0)
-    lin_vel_z_l2 = RewTerm(func=mdp.lin_vel_z_l2, weight=-0.2)
-    ang_vel_xy_l2 = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
-    dof_torques_l2 = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-4)
-    dof_acc_l2 = RewTerm(func=mdp.joint_acc_l2, weight=-1.0e-7)
-    action_rate_l2 = RewTerm(func=mdp.action_rate_l2, weight=-0.005)
-    feet_air_time = RewTerm(
-        func=mdp.feet_air_time,
-        weight=0.75,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*Foot"),
-            "command_name": "base_velocity",
-            "threshold": 0.2,
-        },
-    )
-
-
 
 @configclass
 class RTv5RoughEnvCfg(LocomotionVelocityRoughEnvCfg):
