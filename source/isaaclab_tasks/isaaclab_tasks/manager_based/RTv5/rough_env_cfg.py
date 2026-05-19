@@ -53,7 +53,7 @@ class RTv5Rewards:
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
             "asset_cfg":  SceneEntityCfg("robot",          body_names=["RightFoot", "LeftFoot"]),
-            "target_height": 0.03,
+            "target_height": 0.05,
             "min_air_time":  0.02,
         },
     )
@@ -121,11 +121,11 @@ class RTv5Rewards:
     # range is roughly [-3, 3] sigmas with init_noise_std=1.0. Penalize only
     # gross out-of-distribution deltas; the integrator clamps to soft joint
     # limits anyway, so this is mostly a regularizer against policy drift.
-    action_clip_violation = RewTerm(
-        func=mdp.action_clip_violation,
-        weight=-0.5,
-        params={"clip_min": -3.0, "clip_max": 3.0},
-    )
+    # action_clip_violation = RewTerm(
+    #     func=mdp.action_clip_violation,
+    #     weight=-0.5,
+    #     params={"clip_min": -3.0, "clip_max": 3.0},
+    # )
 
     # hip_vel_same_sign = RewTerm(
     #     func=mdp.hip_vel_same_sign, 

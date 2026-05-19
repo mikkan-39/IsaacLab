@@ -102,6 +102,14 @@ class DelayedBacklashJointPositionAction(JointPositionAction):
         self._history_jitter_prob = float(cfg.reset_history_jitter_prob)
 
     def process_actions(self, actions: torch.Tensor):
+        # Hard-clip raw policy output to per-joint bounds from cfg.clip. This
+        # bounds the per-step delta authority and removes the need for an
+        # action_clip_violation reward (the policy can no longer exceed the
+        # bounds, so penalizing violation is meaningless). Done BEFORE the LPF
+        # and integration so downstream stages always see in-range actions.
+        if self.cfg.clip is not None:
+            actions = torch.clamp(actions, min=self._clip[:, :, 0], max=self._clip[:, :, 1])
+            
         # LPF on raw policy output. Filters jerk in the *delta* signal before it
         # gets integrated, which keeps the slew rate well-behaved even if the
         # policy network produces noisy outputs.
