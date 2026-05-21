@@ -186,7 +186,7 @@ class RTv5Rewards:
 
     joint_deviation_l1 = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-0.5,
+        weight=-0.01,
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex])},
     )
 

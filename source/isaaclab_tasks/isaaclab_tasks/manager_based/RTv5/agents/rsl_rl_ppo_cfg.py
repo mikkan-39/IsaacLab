@@ -5,7 +5,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 
 @configclass
 class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 32
+    num_steps_per_env = 64
     max_iterations = 3000
     save_interval = 50
     experiment_name = "RTv5_rough"
@@ -36,11 +36,11 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        entropy_coef=0.0,
+        entropy_coef=0.003,
         num_learning_epochs=10,
         num_mini_batches=8,
         # learning_rate=1.0e-4,
-        learning_rate=1.0e-3,
+        learning_rate=3.0e-4,
         schedule="adaptive",
         gamma=0.995,
         lam=0.95,

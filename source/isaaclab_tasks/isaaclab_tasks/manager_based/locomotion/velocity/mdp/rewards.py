@@ -114,27 +114,35 @@ def track_lin_vel_xy_yaw_frame_exp(
     command_name: str,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     track_y_axis: bool = True,
+    std_y: float | None = None,
 ) -> torch.Tensor:
     """Reward tracking of linear velocity commands in the gravity-aligned yaw frame using exponential kernel.
 
     By default penalizes mismatch on both planar axes (same as commanding ``vx, vy`` in the yaw frame).
 
+    **Kernel:** With full XY tracking, returns ``exp(-((e_x/std_x)^2 + (e_y/std_y)^2))`` where ``e = cmd - vel``
+    in the yaw frame and ``std_x = std``. If ``std_y`` is omitted, ``std_y = std`` and the expression matches the
+    legacy single-bandwidth form ``exp(-(e_x^2 + e_y^2) / std^2)``.
+
     .. caution::
 
         Setting ``track_y_axis=False`` drops all lateral-command tracking. That often collapses training
         to sideways / crab gaits—the policy still gets ``vx`` credit while ``vy`` is a free exploit.
-        Prefer keeping full XY tracking, or soften lateral pressure (e.g. a separate weaker term /
-        wider kernel on ``vy`` once implemented) rather than disabling ``y`` outright.
+        Prefer keeping full XY tracking with a larger ``std_y`` (softer lateral) rather than disabling
+        ``y`` outright.
     """
     # extract the used quantities (to enable type-hinting)
     asset = env.scene[asset_cfg.name]
     vel_yaw = quat_apply_inverse(yaw_quat(asset.data.root_quat_w), asset.data.root_lin_vel_w[:, :3])
     cmd = env.command_manager.get_command(command_name)
     if track_y_axis:
-        lin_vel_error = torch.sum(torch.square(cmd[:, :2] - vel_yaw[:, :2]), dim=1)
-    else:
-        lin_vel_error = torch.square(cmd[:, 0] - vel_yaw[:, 0])
-    return torch.exp(-lin_vel_error / std**2)
+        ex = cmd[:, :2] - vel_yaw[:, :2]
+        if std_y is None:
+            lin_vel_error = torch.sum(torch.square(ex), dim=1)
+            return torch.exp(-lin_vel_error / (std**2))
+        return torch.exp(-((ex[:, 0] ** 2) / (std**2) + (ex[:, 1] ** 2) / (std_y**2)))
+    lin_vel_error = torch.square(cmd[:, 0] - vel_yaw[:, 0])
+    return torch.exp(-lin_vel_error / (std**2))
 
 
 def track_ang_vel_z_world_exp(
