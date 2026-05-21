@@ -111,15 +111,15 @@ class RTv5Rewards:
     )
 
     # Delta actions: discourage sustained DC bias joint-to-joint (walking only).
-    action_episode_mean_abs = RewTerm(
-        func=ActionRunningMeanAbsPenalty,
-        weight=-0.03,
-        params={
-            "use_raw_actions": True,
-            "command_name": "base_velocity",
-            "min_linear_cmd": 0.06,
-        },
-    )
+    # action_episode_mean_abs = RewTerm(
+    #     func=ActionRunningMeanAbsPenalty,
+    #     weight=-0.03,
+    #     params={
+    #         "use_raw_actions": True,
+    #         "command_name": "base_velocity",
+    #         "min_linear_cmd": 0.06,
+    #     },
+    # )
 
     # joint_dir_change = RewTerm(
     #     func=mdp.joint_direction_change_penalty,
