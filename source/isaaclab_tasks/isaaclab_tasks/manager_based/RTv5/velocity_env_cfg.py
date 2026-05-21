@@ -23,7 +23,7 @@ import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from isaaclab_tasks.manager_based.RTv5.delayed_backlash_action import DelayedBacklashJointPositionActionCfg
 import torch
 
-GAIT_FREQ_RANGE = (1.5, 1.5)  # Hz — per-env random frequency range
+GAIT_FREQ_RANGE = (1.0, 1.5)  # Hz — per-env random frequency range
 
 
 def _get_gait_freq(env) -> torch.Tensor:
@@ -183,7 +183,7 @@ class CommandsCfg:
         heading_command=False,
         debug_vis=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 0.35), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0)
+            lin_vel_x=(0.05, 0.35), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.5, 0.5)
         ),
     )
 
@@ -192,7 +192,25 @@ class CommandsCfg:
 class ActionsCfg:
     """Action specifications for the MDP."""
 
-    joint_pos = DelayedBacklashJointPositionActionCfg(
+    # joint_speed = mdp.JointVelocityActionCfg(
+    #     asset_name="robot",
+    #     joint_names=[controllableJointsRegex],
+    #     scale=5.0,
+    #     use_default_offset=True,
+    #     preserve_order=True,
+    #     clip={".*": (-1.0, 1.0)},
+    # )
+
+    # joint_pos = mdp.JointPositionActionCfg(
+    #     asset_name="robot",
+    #     joint_names=[controllableJointsRegex],
+    #     scale=1.0,
+    #     use_default_offset=True,
+    #     preserve_order=True,
+    #     clip={".*": (-2.0, 2.0)},
+    # )
+
+    joint_integrated_pos = DelayedBacklashJointPositionActionCfg(
         asset_name="robot",
         joint_names=[controllableJointsRegex],
         # `scale` is unused in delta mode; per-step magnitude is `delta_scale`.
@@ -200,20 +218,20 @@ class ActionsCfg:
         use_default_offset=True,
         preserve_order=True,
         # Tier-2 #4: delta-integrated targets instead of absolute targets.
-        # ~0.05 rad/step at 50 Hz caps slew rate at ~143 deg/s under unit action,
-        # matching what real ST3215-class servos can track without saturating.
-        delta_scale=0.10,
+        # ~0.2 rad/step at 50 Hz caps slew rate at ~572 deg/s under unit action,
+        # matching what real ST3215-HS-class servos can track without saturating.
+        delta_scale=0.1,
         # Tier-3 #11: stochastically perturb action history at reset so the
         # policy learns to recover from non-default startup states (handed
         # control from stand-up routine, hot restarts on hardware, etc.).
-        reset_history_jitter_std=0.05,
-        reset_history_jitter_prob=0.25,
-        min_delay_steps=2,
-        max_delay_steps=4,
-        backlash_deg=1.0,
+        reset_history_jitter_std=0.00,
+        reset_history_jitter_prob=0.00,
+        min_delay_steps=0,
+        max_delay_steps=0,
+        backlash_deg=0.0,
         # Tier-2 #5: enable servo position jitter. ~0.007 rad ≈ 0.4° matches
         # bus-servo step quantization (~0.087°/count) plus mechanical jitter.
-        action_noise_std=0.007,
+        action_noise_std=0.000,
         action_lpf_alpha=1.0,
         clip={".*": (-3.0, 3.0)},
     )
@@ -267,15 +285,15 @@ class ObservationsCfg:
             params={"asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[controllableJointsRegex]
             )},
-            modifiers=[
-                DelayedObservationCfg(
-                    min_lag=0,
-                    max_lag=2,
-                    per_env=True,
-                    hold_prob=0.5,
-                    update_period=1,
-                )
-            ],
+            # modifiers=[
+            #     DelayedObservationCfg(
+            #         min_lag=0,
+            #         max_lag=2,
+            #         per_env=True,
+            #         hold_prob=0.9,
+            #         update_period=1,
+            #     )
+            # ],
         )
         actions = ObsTerm(func=mdp.last_action)
 
@@ -284,7 +302,7 @@ class ObservationsCfg:
             # every NoiseCfg attached to every ObsTerm. This was the root cause
             # of the entire observation pipeline being noise-free in sim while
             # the real robot's observations are heavily noisy. Enable.
-            self.enable_corruption = True
+            self.enable_corruption = False
             self.concatenate_terms = True
 
     # observation groups
@@ -391,12 +409,12 @@ class EventCfg:
         },
     )
 
-    push_robot = EventTerm(
-        func=mdp.push_by_setting_velocity,
-        mode="interval",
-        interval_range_s=(1.0, 10.0),
-        params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)}},
-    )
+    # push_robot = EventTerm(
+    #     func=mdp.push_by_setting_velocity,
+    #     mode="interval",
+    #     interval_range_s=(1.0, 10.0),
+    #     params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)}},
+    # )
 
     # robot_joint_stiffness_and_damping = EventTerm(
     #     func=mdp.randomize_actuator_gains,
@@ -410,27 +428,27 @@ class EventCfg:
     #     },
     # )
 
-    robot_velocity_limit = EventTerm(
-        func=randomize_actuator_velocity_limit,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-            "velocity_range": (5.24, 11.1),
-        },
-    )
+    # robot_velocity_limit = EventTerm(
+    #     func=randomize_actuator_velocity_limit,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+    #         "velocity_range": (11.1 * 0.75, 11.1 * 1.5),
+    #     },
+    # )
 
     # Tier-1 #2: battery-voltage-droop model. ST3215 spec is 1.96 Nm @ 12V; a
     # 10V pack delivers roughly 1.5 Nm. Sampling per reset across that range
     # forces the policy to handle torque-limited stance and pushoff, which is
     # the most common cause of policy collapse on a partially discharged pack.
-    robot_effort_limit = EventTerm(
-        func=randomize_actuator_effort_limit,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-            "effort_range": (1.5, 1.96),
-        },
-    )
+    # robot_effort_limit = EventTerm(
+    #     func=randomize_actuator_effort_limit,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+    #         "effort_range": (1.5, 1.96),
+    #     },
+    # )
 
 
 

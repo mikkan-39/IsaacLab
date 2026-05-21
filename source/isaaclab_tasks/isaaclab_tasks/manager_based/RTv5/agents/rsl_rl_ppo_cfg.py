@@ -5,7 +5,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 
 @configclass
 class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 96
+    num_steps_per_env = 32
     max_iterations = 3000
     save_interval = 50
     experiment_name = "RTv5_rough"
@@ -22,13 +22,13 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     # fp16 = True 
     obs_groups = {"policy": ["policy"], "critic": ["policy"]}
     policy = RslRlPpoActorCriticCfg(
-        init_noise_std=1.0,
+        init_noise_std=0.2,
         # actor_hidden_dims=[150, 75, 30],
         # critic_hidden_dims=[150, 75, 30],
         actor_obs_normalization=True,
         critic_obs_normalization=False,
-        actor_hidden_dims=[512, 256, 128],
-        critic_hidden_dims=[512, 256, 128],
+        actor_hidden_dims=[384, 192, 96],
+        critic_hidden_dims=[384, 192, 96],
         activation="elu",
         # noise_std_type="log",
     )
@@ -36,7 +36,7 @@ class RTv5RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        entropy_coef=0.005,
+        entropy_coef=0.0,
         num_learning_epochs=10,
         num_mini_batches=8,
         # learning_rate=1.0e-4,
