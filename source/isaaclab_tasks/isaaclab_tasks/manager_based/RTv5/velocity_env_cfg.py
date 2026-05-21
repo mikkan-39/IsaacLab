@@ -220,7 +220,7 @@ class ActionsCfg:
         # Tier-2 #4: delta-integrated targets instead of absolute targets.
         # ~0.2 rad/step at 50 Hz caps slew rate at ~572 deg/s under unit action,
         # matching what real ST3215-HS-class servos can track without saturating.
-        delta_scale=0.1,
+        delta_scale=0.3,
         # Tier-3 #11: stochastically perturb action history at reset so the
         # policy learns to recover from non-default startup states (handed
         # control from stand-up routine, hot restarts on hardware, etc.).
@@ -233,7 +233,7 @@ class ActionsCfg:
         # bus-servo step quantization (~0.087°/count) plus mechanical jitter.
         action_noise_std=0.000,
         action_lpf_alpha=1.0,
-        clip={".*": (-3.0, 3.0)},
+        clip={".*": (-1.0, 1.0)},
     )
 
 
