@@ -109,7 +109,7 @@ class RTv6SinusoidalGaitController:
         raw_phase = params[..., 1]
         raw_offset = params[..., 2]
 
-        amp = torch.clamp(raw_amp, min=0.0) * AMPLITUDE_LIMIT
+        amp = torch.clamp(raw_amp, min=0.0, max=1.0) * AMPLITUDE_LIMIT
         self._amplitude[:] = torch.maximum(amp, self._amplitude_minimums)
         self._phase_offset[:] = torch.clamp(raw_phase, min=-1.0, max=1.0) * PHASE_OFFSET_LIMIT
         offset = torch.clamp(raw_offset, min=-1.0, max=1.0) * OFFSET_LIMIT
