@@ -252,15 +252,15 @@ class ObservationsCfg:
         # Leaving placement to whoever knows the actual hardware mount geometry.
 
         # Accelerometer with gravity (like real IMU)
-        base_lin_acc = ObsTerm(
-            func=mdp.base_lin_acc_with_gravity,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
-            params={"gravity_bias": (0.0, 0.0, 9.81)},
-        )
-        base_ang_vel = ObsTerm(
-            func=mdp.base_ang_vel,
-            noise=GaussianNoiseCfg(mean=0.0, std=0.04, operation="add"),
-        )
+        # base_lin_acc = ObsTerm(
+        #     func=mdp.base_lin_acc_with_gravity,
+        #     noise=GaussianNoiseCfg(mean=0.0, std=0.05, operation="add"),
+        #     params={"gravity_bias": (0.0, 0.0, 9.81)},
+        # )
+        # base_ang_vel = ObsTerm(
+        #     func=mdp.base_ang_vel,
+        #     noise=GaussianNoiseCfg(mean=0.0, std=0.04, operation="add"),
+        # )
         projected_gravity = ObsTerm(
             func=mdp.projected_gravity,
             noise=GaussianNoiseCfg(mean=0.0, std=0.025, operation="add"),
@@ -285,15 +285,15 @@ class ObservationsCfg:
             params={"asset_cfg": SceneEntityCfg(
                 "robot", joint_names=[controllableJointsRegex]
             )},
-            # modifiers=[
-            #     DelayedObservationCfg(
-            #         min_lag=0,
-            #         max_lag=2,
-            #         per_env=True,
-            #         hold_prob=0.9,
-            #         update_period=1,
-            #     )
-            # ],
+            modifiers=[
+                DelayedObservationCfg(
+                    min_lag=0,
+                    max_lag=2,
+                    per_env=True,
+                    hold_prob=0.9,
+                    update_period=1,
+                )
+            ],
         )
         actions = ObsTerm(func=mdp.last_action)
 
@@ -302,7 +302,7 @@ class ObservationsCfg:
             # every NoiseCfg attached to every ObsTerm. This was the root cause
             # of the entire observation pipeline being noise-free in sim while
             # the real robot's observations are heavily noisy. Enable.
-            self.enable_corruption = False
+            self.enable_corruption = True
             self.concatenate_terms = True
 
     # observation groups
@@ -416,26 +416,26 @@ class EventCfg:
     #     params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)}},
     # )
 
-    # robot_joint_stiffness_and_damping = EventTerm(
-    #     func=mdp.randomize_actuator_gains,
-    #     mode="reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-    #         "stiffness_distribution_params": (0.75, 1.25),
-    #         "damping_distribution_params": (0.75, 1.25),
-    #         "operation": "scale",
-    #         "distribution": "uniform",
-    #     },
-    # )
+    robot_joint_stiffness_and_damping = EventTerm(
+        func=mdp.randomize_actuator_gains,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+            "stiffness_distribution_params": (0.75, 1.25),
+            "damping_distribution_params": (0.75, 1.25),
+            "operation": "scale",
+            "distribution": "uniform",
+        },
+    )
 
-    # robot_velocity_limit = EventTerm(
-    #     func=randomize_actuator_velocity_limit,
-    #     mode="reset",
-    #     params={
-    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-    #         "velocity_range": (11.1 * 0.75, 11.1 * 1.5),
-    #     },
-    # )
+    robot_velocity_limit = EventTerm(
+        func=randomize_actuator_velocity_limit,
+        mode="reset",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+            "velocity_range": (11.1 * 0.75, 11.1 * 1.5),
+        },
+    )
 
     # Tier-1 #2: battery-voltage-droop model. ST3215 spec is 1.96 Nm @ 12V; a
     # 10V pack delivers roughly 1.5 Nm. Sampling per reset across that range

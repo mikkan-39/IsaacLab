@@ -38,19 +38,31 @@ parser.add_argument(
     "--print_policy_obs",
     action="store_true",
     default=False,
-    help="Print the policy observation vector (env 0) for sim2real comparison with the robot.",
+    help="Print policy observation (--print_policy_obs_env) for sim2real comparison with the robot.",
 )
 parser.add_argument(
     "--print_policy_obs_max_steps",
     type=int,
     default=30,
-    help="With --print_policy_obs: print at most N lines (initial obs + after each env.step). Default: 30.",
+    help=(
+        "With --print_policy_obs: max lines of observations (initial + after each env.step). "
+        "With --print_policy_actions: max lines of policy actions. Default: 30."
+    ),
+)
+parser.add_argument(
+    "--print_policy_actions",
+    action="store_true",
+    default=False,
+    help=(
+        "Print policy actions for env (--print_policy_obs_env) each inference. "
+        "Uses the same optional clip as RslRlVecEnvWrapper when logging."
+    ),
 )
 parser.add_argument(
     "--print_policy_obs_env",
     type=int,
     default=0,
-    help="Environment index for --print_policy_obs. Default: 0.",
+    help="Environment index for --print_policy_obs and --print_policy_actions. Default: 0.",
 )
 # append RSL-RL cli arguments
 cli_args.add_rsl_rl_args(parser)
@@ -98,6 +110,13 @@ from isaaclab_tasks.utils.hydra import hydra_task_config
 # PLACEHOLDER: Extension template (do not remove this comment)
 
 
+def _prepare_actions_like_env_step(actions: torch.Tensor, clip_actions: float | None) -> torch.Tensor:
+    """Match :meth:`RslRlVecEnvWrapper.step` clipping so logs match actuator-bound actions."""
+    if clip_actions is not None:
+        return torch.clamp(actions, -clip_actions, clip_actions)
+    return actions
+
+
 def _print_policy_observation(obs, env_idx: int, step_label: str) -> None:
     """Print one policy-group observation row for sim2real debugging (matches deployed policy input)."""
     try:
@@ -109,6 +128,13 @@ def _print_policy_observation(obs, env_idx: int, step_label: str) -> None:
     # Single line: easy to copy into a diff vs robot JSONL
     s = ",".join(f"{float(x):.8f}" for x in row)
     print(f"[sim policy_obs env={env_idx} {step_label}] [{s}]")
+
+
+def _print_policy_actions(actions: torch.Tensor, env_idx: int, step_label: str) -> None:
+    """Print policy actions for env ``env_idx`` (same comma-separated numeric style as observations)."""
+    row = actions[env_idx].detach().cpu().flatten()
+    s = ",".join(f"{float(x):.8f}" for x in row)
+    print(f"[sim policy_action env={env_idx} {step_label}] [{s}]")
 
 
 @hydra_task_config(args_cli.task, args_cli.agent)
@@ -209,8 +235,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     obs = env.get_observations()
     timestep = 0
     policy_obs_print_count = 0
+    policy_action_print_count = 0
+    play_step = 0
     pe = args_cli.print_policy_obs_env
     pomax = args_cli.print_policy_obs_max_steps
+    clip_a = getattr(agent_cfg, "clip_actions", None)
     if args_cli.print_policy_obs and policy_obs_print_count < pomax:
         _print_policy_observation(obs, pe, "after_get_observations")
         policy_obs_print_count += 1
@@ -221,13 +250,20 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         with torch.inference_mode():
             # agent stepping
             actions = policy(obs)
+            if args_cli.print_policy_actions and policy_action_print_count < pomax:
+                actions_log = _prepare_actions_like_env_step(actions, clip_a)
+                _print_policy_actions(
+                    actions_log, pe, f"after_policy play_step={play_step}"
+                )
+                policy_action_print_count += 1
             # env stepping
             obs, _, dones, _ = env.step(actions)
             # reset recurrent states for episodes that have terminated
             policy_nn.reset(dones)
         if args_cli.print_policy_obs and policy_obs_print_count < pomax:
-            _print_policy_observation(obs, pe, f"after_step timestep={timestep}")
+            _print_policy_observation(obs, pe, f"after_step play_step={play_step}")
             policy_obs_print_count += 1
+        play_step += 1
         if args_cli.video:
             timestep += 1
             # Exit the play loop after recording one video
