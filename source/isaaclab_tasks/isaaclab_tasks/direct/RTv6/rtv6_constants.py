@@ -13,7 +13,7 @@ GAIT_FREQ = 1.25  # Hz, fixed for all envs
 # --- Sinusoidal target limits (policy outputs are in [-1, 1] before scaling) ---
 AMPLITUDE_LIMIT = 1.0
 OFFSET_LIMIT = 0.3
-PHASE_OFFSET_LIMIT = math.pi / 2
+PHASE_OFFSET_LIMIT = math.pi
 
 # --- Leg joints (policy controls right leg only; left is mirrored) ---
 RIGHT_LEG_JOINT_NAMES: tuple[str, ...] = (
