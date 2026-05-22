@@ -128,8 +128,8 @@ class MySceneCfg(InteractiveSceneCfg):
             # randomization on top is handled by `robot_foot_material` event.
             friction_combine_mode="min",
             restitution_combine_mode="min",
-            static_friction=0.8,
-            dynamic_friction=0.7,
+            static_friction=1.0,
+            dynamic_friction=1.0,
             restitution=0.0,
         ),
         visual_material=sim_utils.MdlFileCfg(
@@ -384,9 +384,9 @@ class EventCfg:
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*base.*"),
             "com_range": {
-                "x": (-0.015, 0.015),
-                "y": (-0.010, 0.010),
-                "z": (-0.010, 0.010),
+                "x": (-0.03, 0.03),
+                "y": (-0.03, 0.03),
+                "z": (-0.03, 0.03),
             },
         },
     )
@@ -401,8 +401,8 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*Foot"),
-            "static_friction_range": (0.4, 1.1),
-            "dynamic_friction_range": (0.3, 1.0),
+            "static_friction_range": (1.0, 1.5),
+            "dynamic_friction_range": (1.0, 1.5),
             "restitution_range": (0.0, 0.05),
             "num_buckets": 64,
             "make_consistent": True,
@@ -428,14 +428,14 @@ class EventCfg:
         },
     )
 
-    robot_velocity_limit = EventTerm(
-        func=randomize_actuator_velocity_limit,
-        mode="reset",
-        params={
-            "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
-            "velocity_range": (11.1 * 0.75, 11.1 * 1.5),
-        },
-    )
+    # robot_velocity_limit = EventTerm(
+    #     func=randomize_actuator_velocity_limit,
+    #     mode="reset",
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", joint_names=[controllableJointsRegex]),
+    #         "velocity_range": (11.1 * 0.75, 11.1 * 1.5),
+    #     },
+    # )
 
     # Tier-1 #2: battery-voltage-droop model. ST3215 spec is 1.96 Nm @ 12V; a
     # 10V pack delivers roughly 1.5 Nm. Sampling per reset across that range

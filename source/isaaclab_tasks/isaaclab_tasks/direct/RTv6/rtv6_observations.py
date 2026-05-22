@@ -1,8 +1,10 @@
 # Copyright (c) 2022-2025, The Isaac Lab Project Developers.
 # SPDX-License-Identifier: BSD-3-Clause
-"""Direct observation tensors for RTv6 (no ObservationManager / RTv5 MDP obs helpers)."""
+"""Direct observation tensors for RTv6."""
 
 from __future__ import annotations
+
+import math
 
 import torch
 
@@ -10,38 +12,26 @@ from isaaclab.assets import Articulation
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import ContactSensor
 
-from .rtv6_constants import GAIT_FREQ_RANGE
-
-
-def get_gait_freq(env) -> torch.Tensor:
-    """Per-env gait clock frequency (Hz); lazy-initialized like RTv5 ``_get_gait_freq``."""
-    if not hasattr(env, "_gait_freq"):
-        env._gait_freq = torch.empty(env.num_envs, device=env.device).uniform_(*GAIT_FREQ_RANGE)
-    return env._gait_freq
-
-
-def resample_gait_freq(env, env_ids) -> None:
-    """Resample gait clock frequency for ``env_ids`` (used on episode reset)."""
-    freq = get_gait_freq(env)
-    n = len(env_ids) if not isinstance(env_ids, slice) else env.num_envs
-    freq[env_ids] = torch.empty(n, device=env.device).uniform_(*GAIT_FREQ_RANGE)
+from .rtv6_constants import GAIT_FREQ, PROJECTED_GRAVITY_OBS_NOISE_STD
 
 
 def gait_phase_sincos(env) -> torch.Tensor:
-    """sin/cos gait phase, shape ``(num_envs, 2)``."""
-    freq = get_gait_freq(env)
-    phase = 2.0 * torch.pi * freq * env.episode_length_buf.float() * env.step_dt
+    """sin/cos of the global gait clock, shape ``(num_envs, 2)``."""
+    phase = 2.0 * math.pi * GAIT_FREQ * env.episode_length_buf.float() * env.step_dt
     return torch.stack([torch.sin(phase), torch.cos(phase)], dim=1)
 
 
 def projected_gravity_b(robot: Articulation) -> torch.Tensor:
-    """Gravity direction in the root/body frame (same as ``mdp.projected_gravity`` for the robot)."""
+    """Gravity direction in the root/body frame."""
     return robot.data.projected_gravity_b
 
 
-def joint_pos_rel_subset(robot: Articulation, joint_ids: list[int] | torch.Tensor | slice) -> torch.Tensor:
-    """Joint positions relative to defaults for the selected DOFs."""
-    return robot.data.joint_pos[:, joint_ids] - robot.data.default_joint_pos[:, joint_ids]
+def projected_gravity_obs(robot: Articulation) -> torch.Tensor:
+    """Noisy projected gravity (std=0.025)."""
+    g = projected_gravity_b(robot)
+    if PROJECTED_GRAVITY_OBS_NOISE_STD > 0.0:
+        g = g + torch.randn_like(g) * PROJECTED_GRAVITY_OBS_NOISE_STD
+    return g
 
 
 def gait_metrics(
@@ -50,7 +40,7 @@ def gait_metrics(
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"]),
     min_air_time: float = 0.04,
 ) -> dict[str, float]:
-    """Passive gait metrics (same behavior as RTv5 ``gait_metrics``); RTv6-owned, no RTv5 imports."""
+    """Passive gait metrics for curriculum logging."""
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
     first_contact = contact_sensor.compute_first_contact(env.step_dt)[:, sensor_cfg.body_ids]
 
@@ -92,9 +82,6 @@ def gait_metrics(
     env._gait_elapsed[env_ids] = 0.0
     env._gait_swing_sum[env_ids] = 0.0
     env._gait_swing_count[env_ids] = 0.0
-    resample_gait_freq(env, env_ids)
-
-    gait_freq = get_gait_freq(env)
 
     return {
         "step_freq_hz": freq.mean().item(),
@@ -102,5 +89,5 @@ def gait_metrics(
         "mean_swing_s": mean_swing.mean().item(),
         "steps_right": env._gait_steps_right.mean().item(),
         "steps_left": env._gait_steps_left.mean().item(),
-        "gait_clock_hz": gait_freq.mean().item(),
+        "gait_clock_hz": GAIT_FREQ,
     }

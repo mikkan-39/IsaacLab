@@ -1,10 +1,6 @@
 # Copyright (c) 2022-2025, The Isaac Lab Project Developers.
 # SPDX-License-Identifier: BSD-3-Clause
-"""Direct RL joint action: LPF → affine (scale/offset) → backlash → noise → FIFO delay → sim targets.
-
-Behavior matches the former ``DelayedBacklashJointPositionAction`` + ``JointPositionAction`` stack without
-:class:`ActionManager` or RTv5 config imports.
-"""
+"""Sinusoidal joint position targets: policy sets right-leg wave parameters; left leg is mirrored."""
 
 from __future__ import annotations
 
@@ -14,145 +10,152 @@ from collections.abc import Sequence
 import torch
 
 from isaaclab.assets import Articulation
-from isaaclab.utils import configclass
+
+from .rtv6_constants import (
+    AMPLITUDE_LIMIT,
+    AMPLITUDE_MINIMUMS,
+    GAIT_ACTION_DIM,
+    GAIT_FREQ,
+    LEG_JOINT_PAIRS,
+    NUM_RIGHT_LEG_JOINTS,
+    OFFSET_LIMIT,
+    PHASE_OFFSET_LIMIT,
+    RIGHT_LEG_JOINT_NAMES,
+)
 
 
-@configclass
-class RTv6JointActionCfg:
-    """Defaults aligned with RTv5 ``DelayedBacklashJointPositionActionCfg`` / ``ActionsCfg``."""
+class RTv6SinusoidalGaitController:
+    """Right-leg gait parameters → per-joint position targets for both legs."""
 
-    joint_names: list[str] | None = None
-    """Regex list passed to :meth:`Articulation.find_joints`. ``None`` uses :data:`CONTROLLABLE_JOINTS_REGEX`."""
+    action_dim = GAIT_ACTION_DIM
 
-    scale: float = 1.0
-    use_default_offset: bool = True
-    preserve_order: bool = True
-
-    min_delay_steps: int = 2
-    max_delay_steps: int = 4
-    backlash_deg: float = 1.0
-    action_noise_std: float = 0.01
-    action_lpf_alpha: float = 0.4
-
-
-class RTv6DelayedJointPositionController:
-    """Tensor-only controller; exposes ``raw_actions`` / ``processed_actions`` like an action term."""
-
-    def __init__(
-        self,
-        cfg: RTv6JointActionCfg,
-        robot: Articulation,
-        joint_name_patterns: list[str],
-        num_envs: int,
-        device: torch.device,
-    ) -> None:
-        self.cfg = cfg
+    def __init__(self, robot: Articulation, num_envs: int, device: torch.device) -> None:
         self._asset = robot
         self.num_envs = num_envs
         self.device = device
 
-        self._joint_ids, self._joint_names = robot.find_joints(joint_name_patterns, preserve_order=cfg.preserve_order)
-        self.action_dim = len(self._joint_ids)
-        if self.action_dim == 0:
-            raise RuntimeError("RTv6DelayedJointPositionController: no joints matched the given patterns.")
+        right_ids, right_names = robot.find_joints(list(RIGHT_LEG_JOINT_NAMES), preserve_order=True)
+        if len(right_names) != NUM_RIGHT_LEG_JOINTS:
+            raise RuntimeError(
+                f"Expected {NUM_RIGHT_LEG_JOINTS} right leg joints, matched {len(right_names)}: {right_names}"
+            )
 
-        self._scale = float(cfg.scale)
-        if cfg.use_default_offset:
-            self._offset = robot.data.default_joint_pos[:, self._joint_ids].clone()
-        else:
-            self._offset = torch.zeros(num_envs, self.action_dim, device=device)
+        left_ids: list[int] = []
+        invert_left: list[bool] = []
+        for _r_name, l_name, invert in LEG_JOINT_PAIRS:
+            lid, _ = robot.find_joints([l_name], preserve_order=True)
+            if len(lid) != 1:
+                raise RuntimeError(f"Left leg joint not found: {l_name}")
+            left_ids.append(lid[0])
+            invert_left.append(invert)
+
+        self._right_joint_ids = list(right_ids)
+        self._left_joint_ids = left_ids
+        self._all_joint_ids = self._right_joint_ids + self._left_joint_ids
+        self._invert_left = torch.tensor(invert_left, device=device, dtype=torch.bool)
+
+        self._default_right = robot.data.default_joint_pos[:, self._right_joint_ids].clone()
+        self._default_left = robot.data.default_joint_pos[:, self._left_joint_ids].clone()
 
         self._raw_actions = torch.zeros(num_envs, self.action_dim, device=device)
-        self._processed_actions = torch.zeros_like(self._raw_actions)
+        self._amplitude = torch.zeros(num_envs, NUM_RIGHT_LEG_JOINTS, device=device)
+        self._phase_offset = torch.zeros(num_envs, NUM_RIGHT_LEG_JOINTS, device=device)
+        self._offset = torch.zeros(num_envs, NUM_RIGHT_LEG_JOINTS, device=device)
 
-        buf_len = cfg.max_delay_steps + 1
-        self._buf = torch.zeros(buf_len, num_envs, self.action_dim, device=device)
-        default = self._offset.clone()
-        self._buf[:] = default.unsqueeze(0)
-        self._buf_head = 0
+        self._two_pi_f = 2.0 * math.pi * GAIT_FREQ
+        self._amplitude_minimums = torch.tensor(AMPLITUDE_MINIMUMS, device=device, dtype=torch.float32).view(1, -1)
 
-        self._delay = torch.randint(cfg.min_delay_steps, cfg.max_delay_steps + 1, (num_envs,), device=device)
+        # Soft joint limits (same as DelayedBacklashJointPositionAction) — clamp targets before sim write.
+        soft_lim = robot.data.soft_joint_pos_limits[0, self._all_joint_ids].clone()  # (12, 2)
+        self._jp_min = soft_lim[:, 0].unsqueeze(0).expand(num_envs, -1).contiguous()
+        self._jp_max = soft_lim[:, 1].unsqueeze(0).expand(num_envs, -1).contiguous()
 
-        self._backlash_rad = cfg.backlash_deg * (math.pi / 180.0)
-        self._gear_pos = default.clone()
-        self._last_dir = torch.zeros(num_envs, self.action_dim, device=device)
+        # Per-joint offset bounds so wave center (default + offset, mirrored on left) stays inside soft limits.
+        soft_r = robot.data.soft_joint_pos_limits[:, self._right_joint_ids, :]
+        soft_l = robot.data.soft_joint_pos_limits[:, self._left_joint_ids, :]
+        off_min_r = soft_r[..., 0] - self._default_right
+        off_max_r = soft_r[..., 1] - self._default_right
+        off_min_l = soft_l[..., 0] - self._default_left
+        off_max_l = soft_l[..., 1] - self._default_left
+        off_min_l_inv = self._default_left - soft_l[..., 1]
+        off_max_l_inv = self._default_left - soft_l[..., 0]
+        off_min_l = torch.where(self._invert_left.unsqueeze(0), off_min_l_inv, off_min_l)
+        off_max_l = torch.where(self._invert_left.unsqueeze(0), off_max_l_inv, off_max_l)
+        policy_bound = torch.tensor([-OFFSET_LIMIT, OFFSET_LIMIT], device=device, dtype=torch.float32)
+        off_min = torch.maximum(torch.maximum(off_min_r, off_min_l), policy_bound[0])
+        off_max = torch.minimum(torch.minimum(off_max_r, off_max_l), policy_bound[1])
+        invalid = off_min > off_max
+        self._offset_min = torch.where(invalid, 0.0, off_min)
+        self._offset_max = torch.where(invalid, 0.0, off_max)
 
-        self._noise_std = cfg.action_noise_std
-        self._env_arange = torch.arange(num_envs, device=device)
-
-        self._lpf_alpha = float(cfg.action_lpf_alpha)
-        self._lpf_state = torch.zeros(num_envs, self.action_dim, device=device)
+        # Buffers for Isaac Lab live plots (updated in :meth:`apply_to_sim`).
+        self.vis_amplitude = self._amplitude
+        self.vis_phase_offset = self._phase_offset
+        self.vis_offset = self._offset
+        self.vis_wave_right = torch.zeros(num_envs, NUM_RIGHT_LEG_JOINTS, device=device)
+        self.vis_wave_left = torch.zeros(num_envs, NUM_RIGHT_LEG_JOINTS, device=device)
+        self.vis_target_right = torch.zeros(num_envs, NUM_RIGHT_LEG_JOINTS, device=device)
+        self.vis_target_left = torch.zeros(num_envs, NUM_RIGHT_LEG_JOINTS, device=device)
 
     @property
     def raw_actions(self) -> torch.Tensor:
         return self._raw_actions
 
-    @property
-    def processed_actions(self) -> torch.Tensor:
-        return self._processed_actions
-
     def process_actions(self, actions: torch.Tensor) -> None:
-        """Once per env step, after optional env-level action noise."""
+        """Parse policy output once per control step. Order per joint: amp, phase, offset."""
         self._raw_actions[:] = actions
+        params = actions.view(self.num_envs, NUM_RIGHT_LEG_JOINTS, 3)
+        raw_amp = params[..., 0]
+        raw_phase = params[..., 1]
+        raw_offset = params[..., 2]
 
-        if self._lpf_alpha >= 1.0 - 1e-9:
-            filtered = actions
-        else:
-            one_m = 1.0 - self._lpf_alpha
-            self._lpf_state.mul_(one_m).add_(actions, alpha=self._lpf_alpha)
-            filtered = self._lpf_state
+        amp = torch.clamp(raw_amp, min=0.0) * AMPLITUDE_LIMIT
+        self._amplitude[:] = torch.maximum(amp, self._amplitude_minimums)
+        self._phase_offset[:] = torch.clamp(raw_phase, min=-1.0, max=1.0) * PHASE_OFFSET_LIMIT
+        offset = torch.clamp(raw_offset, min=-1.0, max=1.0) * OFFSET_LIMIT
+        # Keep oscillation center inside soft limits (per joint / leg mirror); final targets still clamped in apply_to_sim.
+        self._offset[:] = torch.clamp(offset, self._offset_min, self._offset_max)
 
-        self._processed_actions = filtered * self._scale + self._offset
+    def apply_to_sim(self, sim_time_s: torch.Tensor) -> None:
+        """Recompute and write position targets for all leg joints (call every physics step).
 
-        target = self._processed_actions
+        Args:
+            sim_time_s: Per-env simulation time in seconds, shape ``(num_envs,)``.
+        """
+        clock = self._two_pi_f * sim_time_s.unsqueeze(-1)
+        sin_r = torch.sin(clock + self._phase_offset)
+        target_right = self._default_right + self._offset + self._amplitude * sin_r
 
-        if self._backlash_rad > 0:
-            delta = target - self._gear_pos
-            direction = torch.sign(delta)
-            dir_changed = (direction != self._last_dir) & (self._last_dir != 0)
-            movement = torch.where(
-                dir_changed,
-                torch.clamp(torch.abs(delta) - self._backlash_rad, min=0) * direction,
-                delta,
-            )
-            self._gear_pos = self._gear_pos + movement
-            self._last_dir = torch.where(delta != 0, direction, self._last_dir)
-            output = self._gear_pos.clone()
-        else:
-            output = target.clone()
+        sin_l = torch.sin(clock + self._phase_offset + math.pi)
+        wave_left = self._offset + self._amplitude * sin_l
+        # Invert offset+sin only; add default_L after (same +offset on both legs).
+        wave_left_mirrored = torch.where(self._invert_left.unsqueeze(0), -wave_left, wave_left)
 
-        if self._noise_std > 0:
-            output = output + torch.randn_like(output) * self._noise_std
+        target_left = self._default_left + wave_left_mirrored
 
-        self._buf[self._buf_head] = output
-        self._buf_head = (self._buf_head + 1) % self._buf.shape[0]
+        self.vis_wave_right[:] = self._offset + self._amplitude * sin_r
+        self.vis_wave_left[:] = wave_left_mirrored
 
-    def apply_to_sim(self) -> None:
-        """Call once per physics substep."""
-        read_idx = (self._buf_head - 1 - self._delay) % self._buf.shape[0]
-        delayed = self._buf[read_idx, self._env_arange]
-        self._asset.set_joint_position_target(delayed, joint_ids=self._joint_ids)
+        targets = torch.cat([target_right, target_left], dim=1)
+        torch.clamp(targets, self._jp_min, self._jp_max, out=targets)
+        self.vis_target_right[:] = targets[:, :NUM_RIGHT_LEG_JOINTS]
+        self.vis_target_left[:] = targets[:, NUM_RIGHT_LEG_JOINTS:]
+        self._asset.set_joint_position_target(targets, joint_ids=self._all_joint_ids)
 
     def reset(self, env_ids: Sequence[int] | None) -> None:
         if env_ids is None:
+            return
+        if isinstance(env_ids, slice):
+            self._raw_actions.zero_()
+            self._amplitude.zero_()
+            self._phase_offset.zero_()
+            self._offset.zero_()
             return
         if isinstance(env_ids, torch.Tensor):
             eid = env_ids
         else:
             eid = torch.as_tensor(env_ids, device=self.device, dtype=torch.long)
-
         self._raw_actions[eid] = 0.0
-
-        default_vals = self._offset[eid]
-        self._gear_pos[eid] = default_vals
-        self._last_dir[eid] = 0.0
-        self._buf[:, eid] = default_vals.unsqueeze(0)
-
-        n = eid.shape[0]
-        self._delay[eid] = torch.randint(
-            self.cfg.min_delay_steps,
-            self.cfg.max_delay_steps + 1,
-            (n,),
-            device=self.device,
-        )
-        self._lpf_state[eid] = 0.0
+        self._amplitude[eid] = 0.0
+        self._phase_offset[eid] = 0.0
+        self._offset[eid] = 0.0

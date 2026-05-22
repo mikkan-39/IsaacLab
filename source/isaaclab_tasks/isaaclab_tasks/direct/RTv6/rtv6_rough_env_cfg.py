@@ -7,23 +7,23 @@ from isaaclab.envs import DirectRLEnvCfg
 from isaaclab.envs.mdp.commands import UniformVelocityCommandCfg
 from isaaclab.utils import configclass
 
-from isaaclab_tasks.manager_based.RTv5.velocity_env_cfg import EventCfg, MySceneCfg
+from isaaclab_assets import RT_CFG
 
-from .rtv6_action import RTv6JointActionCfg
+from isaaclab_tasks.manager_based.RTv5.velocity_env_cfg import EventCfg, MySceneCfg
 
 
 @configclass
 class RTv6CommandsCfg:
-    """Velocity command spec (mirrors RTv5 ``CommandsCfg.base_velocity``; no RTv5 import)."""
+    """Velocity command spec (mirrors RTv5 ``CommandsCfg.base_velocity``)."""
 
     base_velocity = UniformVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(10.0, 10.0),
-        rel_standing_envs=0.01,
+        rel_standing_envs=0.05,
         heading_command=False,
         debug_vis=False,
         ranges=UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.0, 0.35), lin_vel_y=(0.0, 0.0), ang_vel_z=(-1.0, 1.0)
+            lin_vel_x=(0.10, 0.10), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.0, 0.0)
         ),
     )
 
@@ -37,9 +37,9 @@ class RTv6RoughEnvCfg(DirectRLEnvCfg):
     events: EventCfg = EventCfg()
 
     commands: RTv6CommandsCfg = RTv6CommandsCfg()
-    joint_action: RTv6JointActionCfg = RTv6JointActionCfg()
 
-    decimation: int = 4
+    # Policy updates infrequently; sinusoid targets refresh every physics step.
+    decimation: int = 20
     episode_length_s: float = 15.0
 
     observation_space: int | dict = 1
@@ -50,12 +50,13 @@ class RTv6RoughEnvCfg(DirectRLEnvCfg):
     enable_gait_curriculum: bool = True
 
     def __post_init__(self) -> None:
-        from isaaclab_assets import RT_CFG
-
         # Mirror LocomotionVelocityRoughEnvCfg + RTv5RoughEnvCfg.
-        self.scene.robot = RT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")  # type: ignore
+        robot_cfg = RT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")  # type: ignore
+        robot_cfg.spawn.articulation_props.solver_position_iteration_count = 8
+        robot_cfg.spawn.articulation_props.enabled_self_collisions = True
+        self.scene.robot = robot_cfg
 
-        self.decimation = 4
+        self.decimation = 20
         self.episode_length_s = 15.0
         self.sim.dt = 1 / 200
         self.sim.render_interval = 4
@@ -89,4 +90,3 @@ class RTv6RoughEnvCfg_PLAY(RTv6RoughEnvCfg):
         super().__post_init__()
         self.scene.num_envs = 50
         self.scene.env_spacing = 2.5
-
