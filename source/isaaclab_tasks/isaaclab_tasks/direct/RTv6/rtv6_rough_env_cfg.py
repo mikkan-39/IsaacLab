@@ -39,7 +39,7 @@ class RTv6RoughEnvCfg(DirectRLEnvCfg):
     commands: RTv6CommandsCfg = RTv6CommandsCfg()
 
     # Policy updates infrequently; sinusoid targets refresh every physics step.
-    decimation: int = 20
+    decimation: int = 200
     episode_length_s: float = 15.0
 
     observation_space: int | dict = 1
@@ -56,7 +56,7 @@ class RTv6RoughEnvCfg(DirectRLEnvCfg):
         robot_cfg.spawn.articulation_props.enabled_self_collisions = True
         self.scene.robot = robot_cfg
 
-        self.decimation = 20
+        self.decimation = 200
         self.episode_length_s = 15.0
         self.sim.dt = 1 / 200
         self.sim.render_interval = 4
