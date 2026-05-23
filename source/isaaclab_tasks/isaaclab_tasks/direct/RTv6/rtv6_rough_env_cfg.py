@@ -23,7 +23,7 @@ class RTv6CommandsCfg:
         heading_command=False,
         debug_vis=False,
         ranges=UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.10, 0.10), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.0, 0.0)
+            lin_vel_x=(0.20, 0.20), lin_vel_y=(0.0, 0.0), ang_vel_z=(-0.0, 0.0)
         ),
     )
 
@@ -56,7 +56,7 @@ class RTv6RoughEnvCfg(DirectRLEnvCfg):
         robot_cfg.spawn.articulation_props.enabled_self_collisions = True
         self.scene.robot = robot_cfg
 
-        self.decimation = 200
+        self.decimation = 20
         self.episode_length_s = 15.0
         self.sim.dt = 1 / 200
         self.sim.render_interval = 4
@@ -66,10 +66,20 @@ class RTv6RoughEnvCfg(DirectRLEnvCfg):
         self.sim.physx.enable_stabilization = True
         self.sim.physx.gpu_max_rigid_patch_count = 10 * 2**15
 
-        self.viewer.eye = (0.3, 1.4, 0.2)
+        self.viewer.eye = (1.4, 0.7, 0.2)
         self.viewer.env_index = 14
         self.viewer.origin_type = "asset_root"
         self.viewer.asset_name = "robot"
+
+        # RTX 
+        # frame gen
+        # self.sim.render.antialiasing_mode = "DLSS"
+        self.sim.render.enable_dlssg = True
+        # ambient occlusion
+        self.sim.render.enable_ambient_occlusion = True
+        # optional extras:
+        self.sim.render.dlss_mode = 1  # 0=Perf, 1=Balanced, 2=Quality, 3=Auto
+        # self.sim.render.rendering_mode = "performance"  # loads Isaac Lab preset .kit (performance/balanced/quality)
 
         if self.scene.contact_forces is not None:
             self.scene.contact_forces.update_period = self.sim.dt

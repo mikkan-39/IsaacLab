@@ -8,7 +8,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 
 @configclass
 class RTv6RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
-    num_steps_per_env = 2
+    num_steps_per_env = 20
     max_iterations = 3000
     save_interval = 50
     experiment_name = "RTv6_rough_direct"

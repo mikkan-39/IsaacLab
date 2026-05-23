@@ -32,6 +32,7 @@ from isaaclab.ui.widgets import ManagerLiveVisualizer
 
 from .rtv6_action import RTv6SinusoidalGaitController
 from .rtv6_action_vis import RTv6GaitActionVisManager
+from .rtv6_feet_clearance import RTv6FeetClearanceHelper
 
 from .rtv6_constants import CONTROLLABLE_JOINTS_REGEX, GAIT_ACTION_DIM
 
@@ -332,6 +333,12 @@ class RTv6RoughEnv(DirectRLEnv):
         self._gait_ctrl = RTv6SinusoidalGaitController(robot, self.num_envs, self.device)
 
         self.action_manager = _DirectActionManagerShim(self, self._gait_ctrl)
+
+        self._feet_clearance_helper = RTv6FeetClearanceHelper(
+            self,
+            terrain_mesh_prim_path=self.scene.terrain.cfg.prim_path,
+            device=self.device,
+        )
 
 
 

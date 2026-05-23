@@ -481,10 +481,8 @@ def feet_clearance_capped(
     asset = env.scene[asset_cfg.name]
     air_time = contact_sensor.data.current_air_time[:, sensor_cfg.body_ids]
     in_air = air_time > min_air_time
-    # Z of the foot bodies in world frame, minus env origin Z so we measure
-    # height above the local terrain spawn point rather than absolute world Z.
-    # On flat ground this is exact; on rough terrain it's correct on average
-    # since terrain heights average to 0 around the spawn point.
+    # Legacy proxy: foot link origin Z minus env spawn Z (not sole clearance; wrong if
+    # env origin is at the robot base). Prefer task-specific raycast clearance (RTv6).
     foot_z = asset.data.body_pos_w[:, asset_cfg.body_ids, 2] - env.scene.env_origins[:, 2:3]
     clearance = torch.clamp(foot_z / target_height, min=0.0, max=1.0)
     return (clearance * in_air.float()).sum(dim=1)

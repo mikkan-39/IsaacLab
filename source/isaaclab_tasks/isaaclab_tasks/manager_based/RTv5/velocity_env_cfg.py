@@ -336,7 +336,7 @@ class EventCfg:
                 # both bounds equal, which is a constant initial spin rather
                 # than randomization. Fixed to a symmetric range so episodes
                 # don't all start with the same biased tipping.
-                "x": (-0.05, 0.05),
+                "x": (0.2, 0.2),
                 "y": (-0.05, 0.05),
                 "z": (-0.0, 0.0),
                 "roll": (-0.15, 0.15),
@@ -401,8 +401,8 @@ class EventCfg:
         mode="startup",
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*Foot"),
-            "static_friction_range": (1.0, 1.5),
-            "dynamic_friction_range": (1.0, 1.5),
+            "static_friction_range": (0.4, 1.2),
+            "dynamic_friction_range": (0.4, 1.2),
             "restitution_range": (0.0, 0.05),
             "num_buckets": 64,
             "make_consistent": True,

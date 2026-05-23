@@ -12,7 +12,7 @@ GAIT_FREQ = 1.25  # Hz, fixed for all envs
 
 # --- Sinusoidal target limits (policy outputs are in [-1, 1] before scaling) ---
 AMPLITUDE_LIMIT = 1.0
-OFFSET_LIMIT = 0.3
+OFFSET_LIMIT = 1.5
 PHASE_OFFSET_LIMIT = math.pi
 
 # --- Leg joints (policy controls right leg only; left is mirrored) ---
@@ -56,9 +56,9 @@ NUM_RIGHT_LEG_JOINTS = len(RIGHT_LEG_JOINT_NAMES)
 AMPLITUDE_MINIMUMS: tuple[float, ...] = (
     0.05,  # base_link_to_RightHipBracket_revolute
     0.05,  # RightHipBracket_to_HipBulkR_revolute
-    0.20,  # HipBulkR_to_HipR_revolute
-    0.20,  # HipR_to_TibiaR_revolute
-    0.05,  # TibiaR_to_FootJointR_revolute
+    0.40,  # HipBulkR_to_HipR_revolute
+    0.40,  # HipR_to_TibiaR_revolute
+    0.20,  # TibiaR_to_FootJointR_revolute
     0.05,  # FootJointR_to_RightFoot_revolute
 )
 
@@ -69,6 +69,15 @@ if any(m < 0.0 or m > AMPLITUDE_LIMIT for m in AMPLITUDE_MINIMUMS):
 
 ACTIONS_PER_JOINT = 3  # amplitude, phase_offset, offset (in that order)
 GAIT_ACTION_DIM = NUM_RIGHT_LEG_JOINTS * ACTIONS_PER_JOINT
+
+# --- Foot clearance raycast (sole patch under each foot link) ---
+# Distance from foot link origin to lowest sole point, along foot link -Z (tune if reward is biased).
+FOOT_SOLE_Z_OFFSET_B = -0.027
+FOOTPRINT_HALF_LENGTH = 0.055
+FOOTPRINT_HALF_WIDTH = 0.030
+FOOTPRINT_RAY_RESOLUTION = 0.025
+FOOT_RAY_CAST_LIFT = 0.02
+FOOT_RAY_MAX_DIST = 0.5
 
 # Observation corruption
 PROJECTED_GRAVITY_OBS_NOISE_STD = 0.025
