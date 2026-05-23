@@ -21,6 +21,9 @@ from .rtv6_constants import (
     OFFSET_LIMIT,
     PHASE_OFFSET_LIMIT,
     RIGHT_LEG_JOINT_NAMES,
+    OFFSETS_BASELINE,
+    PHASE_OFFSETS_BASELINE,
+    START_TIME,
 )
 
 
@@ -42,17 +45,20 @@ class RTv6SinusoidalGaitController:
 
         left_ids: list[int] = []
         invert_left: list[bool] = []
-        for _r_name, l_name, invert in LEG_JOINT_PAIRS:
+        invert_left_amplitude: list[bool] = []
+        for _r_name, l_name, invert_target, invert_amp in LEG_JOINT_PAIRS:
             lid, _ = robot.find_joints([l_name], preserve_order=True)
             if len(lid) != 1:
                 raise RuntimeError(f"Left leg joint not found: {l_name}")
             left_ids.append(lid[0])
-            invert_left.append(invert)
+            invert_left.append(invert_target)
+            invert_left_amplitude.append(invert_amp)
 
         self._right_joint_ids = list(right_ids)
         self._left_joint_ids = left_ids
         self._all_joint_ids = self._right_joint_ids + self._left_joint_ids
         self._invert_left = torch.tensor(invert_left, device=device, dtype=torch.bool)
+        self._invert_left_amplitude = torch.tensor(invert_left_amplitude, device=device, dtype=torch.bool)
 
         self._default_right = robot.data.default_joint_pos[:, self._right_joint_ids].clone()
         self._default_left = robot.data.default_joint_pos[:, self._left_joint_ids].clone()
@@ -64,6 +70,9 @@ class RTv6SinusoidalGaitController:
 
         self._two_pi_f = 2.0 * math.pi * GAIT_FREQ
         self._amplitude_minimums = torch.tensor(AMPLITUDE_MINIMUMS, device=device, dtype=torch.float32).view(1, -1)
+        self._offsets_baseline = torch.tensor(OFFSETS_BASELINE, device=device, dtype=torch.float32).view(1, -1)
+        self._phase_offsets_baseline = torch.tensor(PHASE_OFFSETS_BASELINE, device=device, dtype=torch.float32).view(1, -1)
+        self._start_time = torch.tensor(START_TIME, device=device, dtype=torch.float32).view(1, -1)
 
         # Soft joint limits (same as DelayedBacklashJointPositionAction) — clamp targets before sim write.
         soft_lim = robot.data.soft_joint_pos_limits[0, self._all_joint_ids].clone()  # (12, 2)
@@ -105,16 +114,20 @@ class RTv6SinusoidalGaitController:
         """Parse policy output once per control step. Order per joint: amp, phase, offset."""
         self._raw_actions[:] = actions
         params = actions.view(self.num_envs, NUM_RIGHT_LEG_JOINTS, 3)
-        raw_amp = params[..., 0]
-        raw_phase = params[..., 1]
-        raw_offset = params[..., 2]
+        # raw_amp = params[..., 0]
+        # raw_phase = params[..., 1]
+        # raw_offset = params[..., 2]
+
+        # TEMP: fixed from constants; policy channels ignored.
+        raw_amp = self._amplitude_minimums.expand(self.num_envs, -1)
+        raw_phase = self._phase_offsets_baseline.expand(self.num_envs, -1)
+        raw_offset = self._offsets_baseline.expand(self.num_envs, -1)
 
         amp = torch.clamp(raw_amp, min=0.0, max=1.0) * AMPLITUDE_LIMIT
         self._amplitude[:] = torch.maximum(amp, self._amplitude_minimums)
-        self._phase_offset[:] = torch.clamp(raw_phase, min=-1.0, max=1.0) * PHASE_OFFSET_LIMIT
-        offset = torch.clamp(raw_offset, min=-1.0, max=1.0) * OFFSET_LIMIT
-        # Keep oscillation center inside soft limits (per joint / leg mirror); final targets still clamped in apply_to_sim.
-        self._offset[:] = torch.clamp(offset, self._offset_min, self._offset_max)
+        # TEMP baselines are radians; do not clamp to [-1, 1] and scale (that maps ±π/2 → ±π, collapsing phases).
+        self._phase_offset[:] = raw_phase
+        self._offset[:] = torch.clamp(raw_offset, self._offset_min, self._offset_max)
 
     def apply_to_sim(self, sim_time_s: torch.Tensor) -> None:
         """Recompute and write position targets for all leg joints (call every physics step).
@@ -124,16 +137,18 @@ class RTv6SinusoidalGaitController:
         """
         clock = self._two_pi_f * sim_time_s.unsqueeze(-1)
         sin_r = torch.sin(clock + self._phase_offset)
-        target_right = self._default_right + self._offset + self._amplitude * sin_r
+        amp_active = self._amplitude * (sim_time_s.unsqueeze(-1) >= self._start_time).to(self._amplitude.dtype)
+        target_right = self._default_right + self._offset + amp_active * sin_r
 
         sin_l = torch.sin(clock + self._phase_offset + math.pi)
-        wave_left = self._offset + self._amplitude * sin_l
-        # Invert offset+sin only; add default_L after (same +offset on both legs).
+        amp_l = torch.where(self._invert_left_amplitude.unsqueeze(0), -amp_active, amp_active)
+        wave_left = self._offset + amp_l * sin_l
+        # Optionally negate full wave (offset + swing); then add default_L.
         wave_left_mirrored = torch.where(self._invert_left.unsqueeze(0), -wave_left, wave_left)
 
         target_left = self._default_left + wave_left_mirrored
 
-        self.vis_wave_right[:] = self._offset + self._amplitude * sin_r
+        self.vis_wave_right[:] = self._offset + amp_active * sin_r
         self.vis_wave_left[:] = wave_left_mirrored
 
         targets = torch.cat([target_right, target_left], dim=1)

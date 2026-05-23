@@ -499,7 +499,9 @@ class RTv6RoughEnv(DirectRLEnv):
 
         ic = mdp.illegal_contact(self, threshold=1.0, sensor_cfg=self._term_illegal_sensor)
 
-        bad = bo | ic
+        # bad = bo | ic
+
+        bad = False
 
         self._rtv6_bad_term_buf[:] = bad
 

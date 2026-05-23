@@ -8,7 +8,7 @@ import math
 CONTROLLABLE_JOINTS_REGEX = r"^(?!.*(Neck|to_Elbow|to_Arm|to_ShoulderR|to_ShoulderL)).*$"
 
 # --- Gait clock (shared by actuation targets and gait_phase observation) ---
-GAIT_FREQ = 1.25  # Hz, fixed for all envs
+GAIT_FREQ = 1
 
 # --- Sinusoidal target limits (policy outputs are in [-1, 1] before scaling) ---
 AMPLITUDE_LIMIT = 1.0
@@ -34,19 +34,33 @@ LEFT_LEG_JOINT_NAMES: tuple[str, ...] = (
     "FootJointL_to_LeftFoot_revolute",
 )
 
-# (right_name, left_name, invert_left_target)
-LEG_JOINT_PAIRS: tuple[tuple[str, str, bool], ...] = tuple(
+# Per left joint (same order as RIGHT_LEG_JOINT_NAMES):
+# - invert_left_target: negate (offset + amp*sin) before adding default_L
+# - invert_left_amplitude: negate amp*sin only on the left leg (offset unchanged)
+INVERT_LEFT_TARGET: tuple[bool, ...] = (
+    True,
+    False,
+    True,
+    True,
+    False,
+    False,
+)
+INVERT_LEFT_AMPLITUDE: tuple[bool, ...] = (
+    False,
+    False,
+    False,
+    False,
+    False,
+    False,
+)
+
+# (right_name, left_name, invert_left_target, invert_left_amplitude)
+LEG_JOINT_PAIRS: tuple[tuple[str, str, bool, bool], ...] = tuple(
     zip(
         RIGHT_LEG_JOINT_NAMES,
         LEFT_LEG_JOINT_NAMES,
-        ( # Flipped left target signs
-            True,
-            False,
-            True,
-            True,
-            False,
-            True,
-        ),
+        INVERT_LEFT_TARGET,
+        INVERT_LEFT_AMPLITUDE,
     )
 )
 
@@ -54,18 +68,52 @@ NUM_RIGHT_LEG_JOINTS = len(RIGHT_LEG_JOINT_NAMES)
 
 # Per-joint amplitude floor (rad), same order as RIGHT_LEG_JOINT_NAMES. Applied after scaling to AMPLITUDE_LIMIT.
 AMPLITUDE_MINIMUMS: tuple[float, ...] = (
-    0.05,  # base_link_to_RightHipBracket_revolute
-    0.05,  # RightHipBracket_to_HipBulkR_revolute
-    0.40,  # HipBulkR_to_HipR_revolute
-    0.40,  # HipR_to_TibiaR_revolute
-    0.20,  # TibiaR_to_FootJointR_revolute
-    0.05,  # FootJointR_to_RightFoot_revolute
+    0.0,  # base_link_to_RightHipBracket_revolute
+    0.2,  # RightHipBracket_to_HipBulkR_revolute
+    0.1,  # HipBulkR_to_HipR_revolute
+    0.2,  # HipR_to_TibiaR_revolute
+    0.1,  # TibiaR_to_FootJointR_revolute
+    0.2,  # FootJointR_to_RightFoot_revolute
+)
+
+OFFSETS_BASELINE: tuple[float, ...] = (
+    0.0,  # base_link_to_RightHipBracket_revolute +outward
+    -0.1,  # RightHipBracket_to_HipBulkR_revolute -outward
+    0.1,  # HipBulkR_to_HipR_revolute            +forward
+    0.0,  # HipR_to_TibiaR_revolute              -bend
+    -0.1,  # TibiaR_to_FootJointR_revolute       -forward
+    0.1,  # FootJointR_to_RightFoot_revolute:    +inward
+)
+
+PHASE_OFFSETS_BASELINE: tuple[float, ...] = (
+    0,  # base_link_to_RightHipBracket_revolute
+    0,  # RightHipBracket_to_HipBulkR_revolute
+    math.pi/2,  # HipBulkR_to_HipR_revolute
+    0,  # HipR_to_TibiaR_revolute
+    math.pi/2,  # TibiaR_to_FootJointR_revolute
+    math.pi,  # FootJointR_to_RightFoot_revolute
+)
+
+# Seconds after episode start before swing amplitude turns on (offset still active). Same order as right leg.
+START_TIME: tuple[float, ...] = (
+    0.0,  # base_link_to_RightHipBracket_revolute
+    0.0,  # RightHipBracket_to_HipBulkR_revolute
+    1.0,  # HipBulkR_to_HipR_revolute
+    0.5,  # HipR_to_TibiaR_revolute
+    1.0,  # TibiaR_to_FootJointR_revolute
+    0.0,  # FootJointR_to_RightFoot_revolute
 )
 
 if len(AMPLITUDE_MINIMUMS) != NUM_RIGHT_LEG_JOINTS:
     raise ValueError("AMPLITUDE_MINIMUMS must have one entry per RIGHT_LEG_JOINT_NAMES joint.")
 if any(m < 0.0 or m > AMPLITUDE_LIMIT for m in AMPLITUDE_MINIMUMS):
     raise ValueError("Each AMPLITUDE_MINIMUMS entry must be in [0, AMPLITUDE_LIMIT].")
+if len(INVERT_LEFT_TARGET) != NUM_RIGHT_LEG_JOINTS or len(INVERT_LEFT_AMPLITUDE) != NUM_RIGHT_LEG_JOINTS:
+    raise ValueError("INVERT_LEFT_* tuples must have one entry per RIGHT_LEG_JOINT_NAMES joint.")
+if len(START_TIME) != NUM_RIGHT_LEG_JOINTS:
+    raise ValueError("START_TIME must have one entry per RIGHT_LEG_JOINT_NAMES joint.")
+if any(t < 0.0 for t in START_TIME):
+    raise ValueError("Each START_TIME entry must be >= 0.")
 
 ACTIONS_PER_JOINT = 3  # amplitude, phase_offset, offset (in that order)
 GAIT_ACTION_DIM = NUM_RIGHT_LEG_JOINTS * ACTIONS_PER_JOINT
