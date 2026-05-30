@@ -46,6 +46,9 @@ class RslRlPpoActorCriticCfg:
     activation: str = MISSING
     """The activation function for the actor and critic networks."""
 
+    zero_actor_mean: bool = False
+    """If True, zero-init the actor MLP output layer (Gaussian mean). Requires a runner that applies it."""
+
 
 @configclass
 class RslRlPpoActorCriticRecurrentCfg(RslRlPpoActorCriticCfg):

@@ -8,6 +8,7 @@ from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, R
 
 @configclass
 class RTv6RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
+    class_name = "RTv6OnPolicyRunner"
     num_steps_per_env = 20
     max_iterations = 3000
     save_interval = 50
@@ -15,18 +16,19 @@ class RTv6RoughPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     empirical_normalization = True
     obs_groups = {"policy": ["policy"], "critic": ["policy"]}
     policy = RslRlPpoActorCriticCfg(
-        init_noise_std=1.0,
+        init_noise_std=0.01,
         actor_obs_normalization=True,
         critic_obs_normalization=False,
-        actor_hidden_dims=[4],
-        critic_hidden_dims=[4],
+        actor_hidden_dims=[1],
+        critic_hidden_dims=[1],
         activation="identity",
+        zero_actor_mean=True,
     )
     algorithm = RslRlPpoAlgorithmCfg(
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        entropy_coef=0.005,
+        entropy_coef=0.001,
         num_learning_epochs=10,
         num_mini_batches=8,
         learning_rate=1.0e-3,

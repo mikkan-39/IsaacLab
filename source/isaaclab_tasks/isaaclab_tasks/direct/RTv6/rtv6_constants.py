@@ -12,7 +12,7 @@ GAIT_FREQ = 1
 
 # --- Sinusoidal target limits (policy outputs are in [-1, 1] before scaling) ---
 AMPLITUDE_LIMIT = 1.0
-OFFSET_LIMIT = 1.5
+OFFSET_LIMIT = 0.3
 PHASE_OFFSET_LIMIT = math.pi
 
 # --- Leg joints (policy controls right leg only; left is mirrored) ---
@@ -66,23 +66,31 @@ LEG_JOINT_PAIRS: tuple[tuple[str, str, bool, bool], ...] = tuple(
 
 NUM_RIGHT_LEG_JOINTS = len(RIGHT_LEG_JOINT_NAMES)
 
+# TEMP: ankle = sign * (knee + hip_bulk) after soft-limit clamp (see :meth:`RTv6SinusoidalGaitController.apply_to_sim`).
+ANKLE_PARALLEL_FROM_HIP_KNEE = True
+ANKLE_PARALLEL_SIGN_RIGHT = 1.0
+ANKLE_PARALLEL_SIGN_LEFT = -1.0
+HIP_BULK_JOINT_INDEX = RIGHT_LEG_JOINT_NAMES.index("HipBulkR_to_HipR_revolute")
+KNEE_JOINT_INDEX = RIGHT_LEG_JOINT_NAMES.index("HipR_to_TibiaR_revolute")
+ANKLE_JOINT_INDEX = RIGHT_LEG_JOINT_NAMES.index("TibiaR_to_FootJointR_revolute")
+
 # Per-joint amplitude floor (rad), same order as RIGHT_LEG_JOINT_NAMES. Applied after scaling to AMPLITUDE_LIMIT.
 AMPLITUDE_MINIMUMS: tuple[float, ...] = (
     0.0,  # base_link_to_RightHipBracket_revolute
     0.2,  # RightHipBracket_to_HipBulkR_revolute
-    0.1,  # HipBulkR_to_HipR_revolute
-    0.2,  # HipR_to_TibiaR_revolute
-    0.1,  # TibiaR_to_FootJointR_revolute
+    0.15,  # HipBulkR_to_HipR_revolute
+    0.3,  # HipR_to_TibiaR_revolute
+    0.15,  # TibiaR_to_FootJointR_revolute
     0.2,  # FootJointR_to_RightFoot_revolute
 )
 
 OFFSETS_BASELINE: tuple[float, ...] = (
     0.0,  # base_link_to_RightHipBracket_revolute +outward
-    -0.1,  # RightHipBracket_to_HipBulkR_revolute -outward
+    -0.05,  # RightHipBracket_to_HipBulkR_revolute -outward
     0.1,  # HipBulkR_to_HipR_revolute            +forward
     0.0,  # HipR_to_TibiaR_revolute              -bend
-    -0.1,  # TibiaR_to_FootJointR_revolute       -forward
-    0.1,  # FootJointR_to_RightFoot_revolute:    +inward
+    -0.05,  # TibiaR_to_FootJointR_revolute       -forward
+    0.05,  # FootJointR_to_RightFoot_revolute:    +inward
 )
 
 PHASE_OFFSETS_BASELINE: tuple[float, ...] = (
@@ -96,12 +104,12 @@ PHASE_OFFSETS_BASELINE: tuple[float, ...] = (
 
 # Seconds after episode start before swing amplitude turns on (offset still active). Same order as right leg.
 START_TIME: tuple[float, ...] = (
-    0.0,  # base_link_to_RightHipBracket_revolute
-    0.0,  # RightHipBracket_to_HipBulkR_revolute
-    1.0,  # HipBulkR_to_HipR_revolute
-    0.5,  # HipR_to_TibiaR_revolute
-    1.0,  # TibiaR_to_FootJointR_revolute
-    0.0,  # FootJointR_to_RightFoot_revolute
+    1/GAIT_FREQ * 0.0,  # base_link_to_RightHipBracket_revolute
+    1/GAIT_FREQ * 0.0,  # RightHipBracket_to_HipBulkR_revolute
+    1/GAIT_FREQ * 1.25,  # HipBulkR_to_HipR_revolute
+    1/GAIT_FREQ * 1.0,  # HipR_to_TibiaR_revolute
+    1/GAIT_FREQ * 1.25,  # TibiaR_to_FootJointR_revolute
+    1/GAIT_FREQ * 0.0,  # FootJointR_to_RightFoot_revolute
 )
 
 if len(AMPLITUDE_MINIMUMS) != NUM_RIGHT_LEG_JOINTS:

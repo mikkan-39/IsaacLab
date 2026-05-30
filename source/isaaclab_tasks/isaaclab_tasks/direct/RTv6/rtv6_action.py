@@ -14,8 +14,14 @@ from isaaclab.assets import Articulation
 from .rtv6_constants import (
     AMPLITUDE_LIMIT,
     AMPLITUDE_MINIMUMS,
+    ANKLE_JOINT_INDEX,
+    ANKLE_PARALLEL_FROM_HIP_KNEE,
+    ANKLE_PARALLEL_SIGN_LEFT,
+    ANKLE_PARALLEL_SIGN_RIGHT,
     GAIT_ACTION_DIM,
     GAIT_FREQ,
+    HIP_BULK_JOINT_INDEX,
+    KNEE_JOINT_INDEX,
     LEG_JOINT_PAIRS,
     NUM_RIGHT_LEG_JOINTS,
     OFFSET_LIMIT,
@@ -114,20 +120,33 @@ class RTv6SinusoidalGaitController:
         """Parse policy output once per control step. Order per joint: amp, phase, offset."""
         self._raw_actions[:] = actions
         params = actions.view(self.num_envs, NUM_RIGHT_LEG_JOINTS, 3)
-        # raw_amp = params[..., 0]
+        raw_amp = params[..., 0]
         # raw_phase = params[..., 1]
-        # raw_offset = params[..., 2]
+        raw_offset = params[..., 2] + self._offsets_baseline.expand(self.num_envs, -1)
 
         # TEMP: fixed from constants; policy channels ignored.
-        raw_amp = self._amplitude_minimums.expand(self.num_envs, -1)
+        # raw_amp = self._amplitude_minimums.expand(self.num_envs, -1)
         raw_phase = self._phase_offsets_baseline.expand(self.num_envs, -1)
-        raw_offset = self._offsets_baseline.expand(self.num_envs, -1)
+        # raw_offset = self._offsets_baseline.expand(self.num_envs, -1)
 
         amp = torch.clamp(raw_amp, min=0.0, max=1.0) * AMPLITUDE_LIMIT
         self._amplitude[:] = torch.maximum(amp, self._amplitude_minimums)
         # TEMP baselines are radians; do not clamp to [-1, 1] and scale (that maps ±π/2 → ±π, collapsing phases).
         self._phase_offset[:] = raw_phase
         self._offset[:] = torch.clamp(raw_offset, self._offset_min, self._offset_max)
+
+    def _apply_ankle_parallel_from_hip_knee(self, targets: torch.Tensor) -> None:
+        """TEMP: ankle = sign * (knee + hip_bulk) using post-clamp hip/knee targets (sign differs per leg)."""
+        leg_signs = (
+            (0, ANKLE_PARALLEL_SIGN_RIGHT),
+            (NUM_RIGHT_LEG_JOINTS, ANKLE_PARALLEL_SIGN_LEFT),
+        )
+        for leg_offset, sign in leg_signs:
+            hip = leg_offset + HIP_BULK_JOINT_INDEX
+            knee = leg_offset + KNEE_JOINT_INDEX
+            ankle = leg_offset + ANKLE_JOINT_INDEX
+            targets[:, ankle] = sign * (targets[:, knee] + targets[:, hip]) + self._offsets_baseline[:, ANKLE_JOINT_INDEX]
+            targets[:, ankle] = torch.clamp(targets[:, ankle], self._jp_min[:, ankle], self._jp_max[:, ankle]) + self._offsets_baseline[:, ANKLE_JOINT_INDEX]
 
     def apply_to_sim(self, sim_time_s: torch.Tensor) -> None:
         """Recompute and write position targets for all leg joints (call every physics step).
@@ -153,6 +172,8 @@ class RTv6SinusoidalGaitController:
 
         targets = torch.cat([target_right, target_left], dim=1)
         torch.clamp(targets, self._jp_min, self._jp_max, out=targets)
+        if ANKLE_PARALLEL_FROM_HIP_KNEE:
+            self._apply_ankle_parallel_from_hip_knee(targets)
         self.vis_target_right[:] = targets[:, :NUM_RIGHT_LEG_JOINTS]
         self.vis_target_left[:] = targets[:, NUM_RIGHT_LEG_JOINTS:]
         self._asset.set_joint_position_target(targets, joint_ids=self._all_joint_ids)

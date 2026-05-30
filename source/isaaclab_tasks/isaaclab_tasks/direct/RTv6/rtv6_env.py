@@ -346,8 +346,8 @@ class RTv6RoughEnv(DirectRLEnv):
 
 
 
-        self._r6_gait_contact_sensor = SceneEntityCfg("contact_forces", body_names=["RightFoot", "LeftFoot"])
-        self._r6_feet_clearance_asset = SceneEntityCfg("robot", body_names=["RightFoot", "LeftFoot"])
+        self._r6_gait_contact_sensor = SceneEntityCfg("contact_forces", body_names=["LeftFoot", "RightFoot"])
+        self._r6_feet_clearance_asset = SceneEntityCfg("robot", body_names=["LeftFoot", "RightFoot"])
 
         self._r6_lin_vel_z_asset = SceneEntityCfg("robot", body_names=".*base.*")
 
@@ -499,9 +499,7 @@ class RTv6RoughEnv(DirectRLEnv):
 
         ic = mdp.illegal_contact(self, threshold=1.0, sensor_cfg=self._term_illegal_sensor)
 
-        # bad = bo | ic
-
-        bad = False
+        bad = bo | ic
 
         self._rtv6_bad_term_buf[:] = bad
 

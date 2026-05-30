@@ -73,7 +73,7 @@ def compute_rtv6_rough_reward_terms(env) -> dict[str, torch.Tensor]:
     e = env
     return {
         "alive_reward": 0.5 * mdp.is_alive(e),
-        "termination_penalty": -200.0 * mdp.is_terminated(e),
+        "termination_penalty": -40.0 * mdp.is_terminated(e),
         "track_lin_vel": 5.0
         * mdp.track_lin_vel_xy_yaw_frame_exp(e, command_name="base_velocity", std=0.1, std_y=0.2),
         "track_ang_vel": 3.0 * mdp.track_ang_vel_z_world_exp(e, command_name="base_velocity", std=0.25),
