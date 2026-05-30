@@ -35,9 +35,13 @@ class ActuatorTuningEnv(DirectRLEnv):
     def __init__(self, cfg: ActuatorTuningEnvCfg, render_mode: str | None = None, **kwargs):
         # load + resample the recording before the sim spins up (pure numpy)
         self.trajectory = load_servo_trajectory(
-            cfg.csv_path, cfg.control_hz, max_duration_s=cfg.max_duration_s
+            cfg.csv_path, cfg.control_hz, max_duration_s=cfg.max_duration_s, ref_lag_steps=cfg.ref_lag_steps
         )
         self._num_steps = self.trajectory.num_steps
+
+        # split the recording into the fixed-duration excitation segments (steps/sines/sawtooths)
+        seg_len_steps = max(1, int(round(cfg.segment_len_s / self.trajectory.step_dt)))
+        self._segment_ids = (np.arange(self._num_steps) // seg_len_steps).astype(np.int64)
 
         # per-step error weights + reversal mask (shared across envs)
         wspec = metrics.WeightSpec(
@@ -214,6 +218,10 @@ class ActuatorTuningEnv(DirectRLEnv):
             self._reversal_np,
             score_mode=self.cfg.score_mode,
             spike_percentile=self.cfg.spike_percentile,
+            segment_ids=self._segment_ids,
+            step_dt=self.trajectory.step_dt,
+            lag_weight=self.cfg.lag_weight,
+            lag_max_s=self.cfg.lag_max_s,
         )
 
     def get_last_sim_pos(self) -> np.ndarray:

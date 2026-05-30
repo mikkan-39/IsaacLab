@@ -20,6 +20,7 @@ METRIC_KEYS = (
     "tracking",
     "weighted_pos_mse",
     "weighted_vel_mse",
+    "seg_lag_s",
     "spike_pos_err",
     "max_abs_pos",
     "reversal_pos_mse",

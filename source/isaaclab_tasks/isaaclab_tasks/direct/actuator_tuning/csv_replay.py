@@ -81,6 +81,7 @@ def load_servo_trajectory(
     control_hz: float,
     *,
     max_duration_s: float | None = None,
+    ref_lag_steps: float = 0.0,
 ) -> ServoTrajectory:
     """Load a recording and resample it onto a uniform control-rate grid.
 
@@ -88,6 +89,9 @@ def load_servo_trajectory(
         csv_path: Path to the recording CSV.
         control_hz: Target replay/control rate (must be lower than the recording rate).
         max_duration_s: Optional cap on the replayed duration (seconds from the start).
+        ref_lag_steps: Advance the real signals (``ref_pos``/``ref_vel``) earlier by this many
+            control steps to compensate for the real servo's measured transport lag. The commanded
+            ``target`` is left untouched. Fractional values are linearly interpolated. 0 = no shift.
 
     Returns:
         A :class:`ServoTrajectory` resampled with a zero-order hold (nearest past sample).
@@ -114,10 +118,23 @@ def load_servo_trajectory(
     idx = np.searchsorted(t_rel_raw, t_ctrl, side="right") - 1
     idx = np.clip(idx, 0, t_rel_raw.size - 1)
 
+    target = raw["target_rad"][idx].copy()
+    ref_pos = raw["position_rad"][idx].copy()
+    ref_vel = raw["speed_rad_s"][idx].copy()
+
+    # advance the real signals to remove the servo's (known, fixed) transport lag; target unchanged
+    if ref_lag_steps:
+        src = np.clip(np.arange(num_steps, dtype=np.float64) + float(ref_lag_steps), 0.0, num_steps - 1)
+        lo = np.floor(src).astype(int)
+        hi = np.clip(lo + 1, 0, num_steps - 1)
+        frac = src - lo
+        ref_pos = ref_pos[lo] * (1.0 - frac) + ref_pos[hi] * frac
+        ref_vel = ref_vel[lo] * (1.0 - frac) + ref_vel[hi] * frac
+
     return ServoTrajectory(
         t_rel=t_ctrl,
-        target=raw["target_rad"][idx].copy(),
-        ref_pos=raw["position_rad"][idx].copy(),
-        ref_vel=raw["speed_rad_s"][idx].copy(),
+        target=target,
+        ref_pos=ref_pos,
+        ref_vel=ref_vel,
         step_dt=step_dt,
     )

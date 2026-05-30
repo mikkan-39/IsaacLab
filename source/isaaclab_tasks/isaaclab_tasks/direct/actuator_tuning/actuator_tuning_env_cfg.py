@@ -70,11 +70,26 @@ class ActuatorTuningEnvCfg(DirectRLEnvCfg):
     """Scoring mode: ``position_only`` | ``position_heavy`` | ``balanced``."""
 
     spike_percentile: float = 99.0
-    """Percentile of |position error| used as the spike term in the score (default p99).
+    """Percentile of |position error| used as the spike term (diagnostic only; not in the score)."""
 
-    Using a high percentile instead of the raw max keeps a single unavoidable step-instant from
-    dominating the score.
+    ref_lag_steps: float = 1.0
+    """Advance the *real* reference (ref_pos/ref_vel) by this many control steps before scoring.
+
+    The real servo has a measured transport lag (~4-16 ms; ~1 step at 50 Hz). Rather than adding a
+    matching dead-time to the simulated command, we time-shift the recorded real signal earlier by
+    this amount so the comparison is about the actuator *dynamics*, not the (known, fixed) comms
+    delay. NOTE: this removes the delay from the *comparison*, not from the simulated model -- for
+    sim2real deployment, re-introduce the delay (a 1-step command buffer) on the deployed sim.
     """
+
+    segment_len_s: float = 10.0
+    """Duration of each independent excitation segment in the recording (steps/sines/sawtooths)."""
+
+    lag_weight: float = 2.0
+    """Weight of the mean per-segment sim-vs-real lag (seconds) added to the score. 0 disables it."""
+
+    lag_max_s: float = 0.3
+    """Half-width of the per-segment lag cross-correlation search window (seconds)."""
 
     # -- error-weighting (transients / reversals emphasized) --
     weight_move_eps: float = 0.05

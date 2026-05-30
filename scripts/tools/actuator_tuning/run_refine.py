@@ -50,6 +50,18 @@ parser.add_argument("--score-mode", type=str, default="position_only", help="pos
 parser.add_argument(
     "--spike-percentile", type=float, default=99.0, help="Percentile of |pos error| used as the spike term (default 99)."
 )
+parser.add_argument(
+    "--ref-lag-steps",
+    type=float,
+    default=1.0,
+    help="Advance the real reference by N control steps to compensate the servo transport lag.",
+)
+parser.add_argument(
+    "--lag-weight",
+    type=float,
+    default=2.0,
+    help="Weight of the per-segment sim-vs-real lag term in the score (0 disables).",
+)
 parser.add_argument("--output-dir", type=str, default="logs/actuator_tuning/run", help="Output directory.")
 parser.add_argument("--top-k", type=int, default=5, help="How many seeds to refine (also env batch size).")
 parser.add_argument("--max-iter", type=int, default=60, help="Max iterations per scipy.optimize run.")
@@ -84,6 +96,8 @@ def build_cfg(num_envs: int) -> ActuatorTuningEnvCfg:
     cfg.max_duration_s = args_cli.max_duration_s
     cfg.score_mode = args_cli.score_mode
     cfg.spike_percentile = args_cli.spike_percentile
+    cfg.ref_lag_steps = args_cli.ref_lag_steps
+    cfg.lag_weight = args_cli.lag_weight
     cfg.scene.num_envs = num_envs
     if args_cli.keep_usd_limits:
         cfg.override_joint_pos_limits = None

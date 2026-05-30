@@ -30,13 +30,24 @@ weighted_pos_mse = sum(w * (sim_pos - real_pos)^2) / sum(w)
 tracking         = position_only: weighted_pos_mse
                    position_heavy: 0.9*pos + 0.1*vel
                    balanced:       0.7*pos + 0.3*vel
-spike_pos_err    = p99(|sim_pos - real_pos|)                     # high percentile, not raw max
-score            = 0.8 * tracking + 0.2 * spike_pos_err          # lower is better
+seg_lag_s        = mean over 10s segments of |best sim-vs-real time shift|   # per-segment xcorr
+score            = tracking + lag_weight * seg_lag_s                          # lower is better
 ```
 
-The spike term is a high percentile of the absolute position error (default p99, set with
-`--spike-percentile`) rather than the raw `max`, so a single unavoidable step-instant doesn't
-dominate the score. `max_abs_pos` is still logged for reference.
+`spike_pos_err` (a high percentile of |position error|, `--spike-percentile`) and `max_abs_pos`
+are still logged as diagnostics but are **no longer in the score**: penalizing worst-case spikes
+rewarded timid, lagging, low-amplitude fits over ones that actually track the motion.
+
+`seg_lag_s` penalizes the sim consistently lagging the real servo. The recording is a concatenation
+of independent fixed-duration motions (`--segment-len-s`, default 10 s: steps / sines / sawtooths),
+so the lag is measured **per segment** via a bounded cross-correlation (`--lag-max-s` window) and
+averaged -- a global cross-correlation across a step->sine boundary would be meaningless. Weight via
+`--lag-weight` (default 2.0; 0 disables).
+
+The real servo's measured transport lag (~4-16 ms; ~1 step at 50 Hz) is compensated by advancing
+the recorded real signal earlier by `--ref-lag-steps` (default 1) before scoring, so the fit is
+about the actuator *dynamics*, not the known comms delay. Note this removes the delay from the
+*comparison* only; for sim2real, re-introduce a 1-step command buffer on the deployed sim.
 
 Per-step weights `w` emphasize the first ~300 ms after movement starts (2x) and direction
 reversals / sudden accelerations (2x). Velocity MSE is always logged but de-emphasized by

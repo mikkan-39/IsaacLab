@@ -60,7 +60,7 @@ def save_overlay(
     if metrics:
         annot = "  ".join(
             f"{k}={metrics[k]:.4g}"
-            for k in ("score", "weighted_pos_mse", "spike_pos_err", "max_abs_pos", "reversal_pos_mse")
+            for k in ("score", "weighted_pos_mse", "seg_lag_s", "spike_pos_err", "max_abs_pos", "reversal_pos_mse")
             if k in metrics
         )
         full_title = f"{title}\n{annot}" if title else annot
