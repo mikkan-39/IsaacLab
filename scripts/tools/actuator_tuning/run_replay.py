@@ -50,14 +50,27 @@ parser.add_argument(
 parser.add_argument(
     "--ref-lag-steps",
     type=float,
-    default=1.0,
-    help="Advance the real reference by N control steps to compensate the servo transport lag.",
+    default=0.0,
+    help="Advance the real reference by N control steps (delay compensation). Default 0 (none).",
 )
 parser.add_argument(
     "--lag-weight",
     type=float,
     default=2.0,
     help="Weight of the per-segment sim-vs-real lag term in the score (0 disables).",
+)
+parser.add_argument(
+    "--actuator-model",
+    type=str,
+    default="dc_motor",
+    choices=["dc_motor", "ideal_pd"],
+    help="Actuator model to drive/tune: dc_motor (command target) or ideal_pd (MLP target).",
+)
+parser.add_argument(
+    "--mlp-checkpoint",
+    type=str,
+    default=None,
+    help="Path to a trained servo MLP (servo_mlp.pt). Used only with --actuator-model ideal_pd.",
 )
 parser.add_argument(
     "--params",
@@ -147,6 +160,8 @@ def build_cfg() -> ActuatorTuningEnvCfg:
     cfg.spike_percentile = args_cli.spike_percentile
     cfg.ref_lag_steps = args_cli.ref_lag_steps
     cfg.lag_weight = args_cli.lag_weight
+    cfg.actuator_model = args_cli.actuator_model
+    cfg.mlp_checkpoint = args_cli.mlp_checkpoint
     cfg.scene.num_envs = args_cli.num_envs
     if args_cli.keep_usd_limits:
         cfg.override_joint_pos_limits = None
@@ -182,14 +197,16 @@ def main():
 
     traj = env.trajectory
     sim_pos = env.get_last_sim_pos()[0]
+    mlp_target = env.get_joint_target() if env.uses_mlp_target else None
     out = plotting.save_overlay(
         args_cli.out,
         traj.t_rel,
         traj.target,
         traj.ref_pos,
         sim_pos,
-        title=f"{args_cli.joint_name}  ({args_cli.score_mode})",
+        title=f"{args_cli.joint_name}  ({args_cli.actuator_model}, {args_cli.score_mode})",
         metrics=scores,
+        mlp_target=mlp_target,
     )
     print(f"[replay] saved overlay plot to: {out}")
 

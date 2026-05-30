@@ -58,8 +58,8 @@ parser.add_argument(
 parser.add_argument(
     "--ref-lag-steps",
     type=float,
-    default=1.0,
-    help="Advance the real reference by N control steps to compensate the servo transport lag.",
+    default=0.0,
+    help="Advance the real reference by N control steps (delay compensation). Default 0 (none).",
 )
 parser.add_argument(
     "--lag-weight",

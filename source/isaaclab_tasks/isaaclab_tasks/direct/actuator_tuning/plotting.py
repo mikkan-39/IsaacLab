@@ -30,6 +30,7 @@ def save_overlay(
     *,
     title: str = "",
     metrics: dict | None = None,
+    mlp_target=None,
 ) -> str:
     """Save a two-panel overlay plot (trajectory + position error).
 
@@ -41,6 +42,7 @@ def save_overlay(
         sim_pos: Simulated trajectory, shape ``(N,)``.
         title: Optional plot title.
         metrics: Optional dict of scalar metrics to annotate.
+        mlp_target: Optional MLP position target the IdealPD follows, shape ``(N,)``.
 
     Returns:
         The output path.
@@ -50,6 +52,8 @@ def save_overlay(
     fig, (ax0, ax1) = plt.subplots(2, 1, figsize=(12, 7), sharex=True, height_ratios=[3, 1])
 
     ax0.plot(t_rel, target, label="target (cmd)", color="tab:gray", linewidth=1.0, linestyle="--")
+    if mlp_target is not None:
+        ax0.plot(t_rel, mlp_target, label="MLP target", color="tab:green", linewidth=1.0, alpha=0.7)
     ax0.plot(t_rel, ref_pos, label="real", color="tab:blue", linewidth=1.5)
     ax0.plot(t_rel, sim_pos, label="sim", color="tab:orange", linewidth=1.5, alpha=0.9)
     ax0.set_ylabel("position (rad)")

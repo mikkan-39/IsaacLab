@@ -1,0 +1,26 @@
+# Example search spec for the IdealPD + MLP workflow (--actuator-model ideal_pd).
+#
+# The joint is driven toward the MLP-predicted (delay-free) position; the PD's own lag is expected
+# to re-create the real transport delay. The search tunes the explicit PD so the joint lands on the
+# raw recorded real trajectory (run with --ref-lag-steps 0).
+#
+# method: latin_hypercube (default) or random
+# Each param: low / high bounds; optional `log: true` to sample in log-space.
+# Only the params listed here are searched; everything else keeps the env default.
+
+n_samples: 4098
+method: latin_hypercube
+
+params:
+  # PD gains: stiff enough for near-perfect tracking, damping shapes the (constant) lag/overshoot.
+  stiffness: {low: 200.0, high: 800.0, log: true}
+  damping: {low: 0.5, high: 100.0, log: true}
+
+  # joint inertia: widens the PD lag without faking top speed
+  armature: {low: 0.005, high: 0.3}
+
+  # explicit torque clip (IdealPD). Keep high unless you want to model torque saturation.
+  # effort_limit: {low: 1.0, high: 10.0}
+
+  # optional friction (PhysX requires static >= dynamic; dynamic is auto-clamped to static)
+  # friction: {low: 0.0, high: 0.5}

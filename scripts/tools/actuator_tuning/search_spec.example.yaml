@@ -5,7 +5,7 @@
 # Only the params listed here are searched; everything else keeps the env default
 # (RTv4 DCMotor values, with friction = 0).
 
-n_samples: 65536
+n_samples: 4096
 method: latin_hypercube
 
 params:

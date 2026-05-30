@@ -193,6 +193,7 @@ def plot_topk(
     res = evaluate_population(env, simulation_app, param_names, top)
     sim_pos = env.get_last_sim_pos()
     traj = env.trajectory
+    mlp_target = env.get_joint_target() if getattr(env, "uses_mlp_target", False) else None
 
     paths: list[str] = []
     for i in range(k):
@@ -206,6 +207,7 @@ def plot_topk(
             sim_pos[i],
             title=f"rank {i}  {title_suffix}".strip(),
             metrics=metrics_row,
+            mlp_target=mlp_target,
         )
         paths.append(path)
 

@@ -49,7 +49,28 @@ class ActuatorTuningEnvCfg(DirectRLEnvCfg):
     """Path to the servo recording CSV."""
 
     actuator_name: str = "ST3215-HS"
-    """Key of the DCMotor actuator group in the robot config."""
+    """Key of the actuator group in the robot config."""
+
+    actuator_model: str = "dc_motor"
+    """Actuator model to tune: ``dc_motor`` | ``ideal_pd``.
+
+    * ``dc_motor`` -- tune the :class:`~isaaclab.actuators.DCMotor` directly against the command
+      target (the original workflow).
+    * ``ideal_pd`` -- drive the joint with an :class:`~isaaclab.actuators.IdealPDActuator` whose
+      position target is the **MLP-predicted** servo trajectory (see :attr:`mlp_checkpoint`), and
+      tune the PD gains so the actuator's (near-constant) lag re-creates the real transport delay.
+    """
+
+    mlp_checkpoint: str | None = None
+    """Path to a trained servo-MLP checkpoint (``servo_mlp.pt``) from ``train_servo_mlp.py``.
+
+    Only used when ``actuator_model == "ideal_pd"``. The MLP is rolled out closed-loop to produce
+    the (delay-free) position target the IdealPD actuator follows. If None in ideal_pd mode, the raw
+    command target is used instead (useful as a baseline / sanity check).
+    """
+
+    ideal_pd_effort_limit: float = 10.0
+    """Default effort clip (N-m) for the IdealPD actuator; overridable per-env by the search."""
 
     control_hz: float = 50.0
     """Control/replay rate in Hz (lower than the recording rate)."""
@@ -72,14 +93,14 @@ class ActuatorTuningEnvCfg(DirectRLEnvCfg):
     spike_percentile: float = 99.0
     """Percentile of |position error| used as the spike term (diagnostic only; not in the score)."""
 
-    ref_lag_steps: float = 1.0
+    ref_lag_steps: float = 0.0
     """Advance the *real* reference (ref_pos/ref_vel) by this many control steps before scoring.
 
-    The real servo has a measured transport lag (~4-16 ms; ~1 step at 50 Hz). Rather than adding a
-    matching dead-time to the simulated command, we time-shift the recorded real signal earlier by
-    this amount so the comparison is about the actuator *dynamics*, not the (known, fixed) comms
-    delay. NOTE: this removes the delay from the *comparison*, not from the simulated model -- for
-    sim2real deployment, re-introduce the delay (a 1-step command buffer) on the deployed sim.
+    Defaults to 0 (no delay compensation). With the IdealPD + MLP workflow the actuator's own lag is
+    expected to re-create the real transport delay, so the sim is scored against the *raw* recorded
+    positions. (The MLP itself was trained on delay-shifted data, so the delay is reintroduced by the
+    PD, not removed from the comparison.) Set >0 only to deliberately pre-shift the real signal, e.g.
+    when tuning the bare DCMotor against the command and wanting to ignore the known comms delay.
     """
 
     segment_len_s: float = 10.0
@@ -119,13 +140,35 @@ class ActuatorTuningEnvCfg(DirectRLEnvCfg):
         self.sim.dt = 1.0 / (self.control_hz * self.decimation)
         self.sim.render_interval = self.decimation
 
-        # fixed-base RT robot with a plain DCMotor and a known (zero) friction baseline
+        # fixed-base RT robot with a known (zero) friction baseline
         robot = RT_CFG.replace(prim_path="/World/envs/env_.*/Robot")  # type: ignore
         robot.spawn.articulation_props.fix_root_link = True
         actuators = copy.deepcopy(robot.actuators)
-        act = actuators[self.actuator_name]
-        act.friction = 0.0
-        act.dynamic_friction = 0.0
-        act.viscous_friction = 0.0
+
+        if self.actuator_model == "ideal_pd":
+            # replace the DCMotor group with an explicit IdealPD actuator (gains tuned per-env). A
+            # high effort/velocity sim cap keeps the solver from clipping; the explicit effort clip
+            # (effort_limit) is what the search may tune.
+            from isaaclab.actuators import IdealPDActuatorCfg
+
+            base = actuators[self.actuator_name]
+            actuators[self.actuator_name] = IdealPDActuatorCfg(
+                joint_names_expr=list(base.joint_names_expr),
+                stiffness=60.0,
+                damping=2.0,
+                armature=0.01,
+                effort_limit=self.ideal_pd_effort_limit,
+                effort_limit_sim=1.0e9,
+                velocity_limit_sim=self.solver_velocity_limit,
+                friction=0.0,
+                dynamic_friction=0.0,
+                viscous_friction=0.0,
+            )
+        else:
+            act = actuators[self.actuator_name]
+            act.friction = 0.0
+            act.dynamic_friction = 0.0
+            act.viscous_friction = 0.0
+
         robot.actuators = actuators
         self.robot_cfg = robot

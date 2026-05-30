@@ -18,6 +18,7 @@ from isaaclab.sim.spawners.from_files import GroundPlaneCfg, spawn_ground_plane
 
 from . import dc_motor_params as dcp
 from . import metrics
+from . import pd_params as pdp
 from .actuator_tuning_env_cfg import ActuatorTuningEnvCfg
 from .csv_replay import load_servo_trajectory
 
@@ -42,6 +43,23 @@ class ActuatorTuningEnv(DirectRLEnv):
         # split the recording into the fixed-duration excitation segments (steps/sines/sawtooths)
         seg_len_steps = max(1, int(round(cfg.segment_len_s / self.trajectory.step_dt)))
         self._segment_ids = (np.arange(self._num_steps) // seg_len_steps).astype(np.int64)
+
+        # position target the joint will follow. For ideal_pd + an MLP checkpoint this is the MLP's
+        # closed-loop (delay-free) prediction; otherwise it is the raw command target.
+        self._joint_target_np = self.trajectory.target.astype(np.float32)
+        if cfg.actuator_model == "ideal_pd" and cfg.mlp_checkpoint:
+            from . import mlp_actuator
+
+            mlp = mlp_actuator.load_mlp(cfg.mlp_checkpoint, device="cpu")
+            self._joint_target_np = mlp_actuator.rollout_targets(
+                mlp,
+                self.trajectory.target,
+                self.trajectory.ref_pos,
+                self.trajectory.ref_vel,
+                self._segment_ids,
+                self.trajectory.step_dt,
+            )
+            print(f"[env] driving IdealPD with MLP target from checkpoint: {cfg.mlp_checkpoint}")
 
         # per-step error weights + reversal mask (shared across envs)
         wspec = metrics.WeightSpec(
@@ -76,6 +94,7 @@ class ActuatorTuningEnv(DirectRLEnv):
 
         # device-side trajectory tensors
         self._target = torch.as_tensor(self.trajectory.target, dtype=torch.float32, device=self.device)
+        self._joint_target = torch.as_tensor(self._joint_target_np, dtype=torch.float32, device=self.device)
         self._ref_pos = torch.as_tensor(self.trajectory.ref_pos, dtype=torch.float32, device=self.device)
         self._ref_vel = torch.as_tensor(self.trajectory.ref_vel, dtype=torch.float32, device=self.device)
 
@@ -85,21 +104,33 @@ class ActuatorTuningEnv(DirectRLEnv):
         self._last_sim_pos = torch.zeros_like(self._sim_pos)
         self._step_idx = 0
 
-        # promote the DC motor stall torque to a per-(env, joint) tensor and snapshot defaults
+        # snapshot the tunable parameters as per-(env, joint) tensors (model-dependent set)
         actuator = self._robot.actuators[cfg.actuator_name]
-        dcp.ensure_tensor_saturation(actuator)
         j = self._joint_idx
-        self._param_values: dict[str, torch.Tensor] = {
-            "stiffness": actuator.stiffness[:, j].clone(),
-            "damping": actuator.damping[:, j].clone(),
-            "velocity_limit": actuator.velocity_limit[:, j].clone(),
-            "effort_limit": actuator.effort_limit[:, j].clone(),
-            "saturation_effort": actuator._saturation_effort[:, j].clone(),
-            "armature": actuator.armature[:, j].clone(),
-            "friction": actuator.friction[:, j].clone(),
-            "dynamic_friction": actuator.dynamic_friction[:, j].clone(),
-            "viscous_friction": actuator.viscous_friction[:, j].clone(),
-        }
+        self._ideal_pd = cfg.actuator_model == "ideal_pd"
+        if self._ideal_pd:
+            self._param_values: dict[str, torch.Tensor] = {
+                "stiffness": actuator.stiffness[:, j].clone(),
+                "damping": actuator.damping[:, j].clone(),
+                "effort_limit": actuator.effort_limit[:, j].clone(),
+                "armature": actuator.armature[:, j].clone(),
+                "friction": actuator.friction[:, j].clone(),
+                "dynamic_friction": actuator.dynamic_friction[:, j].clone(),
+                "viscous_friction": actuator.viscous_friction[:, j].clone(),
+            }
+        else:
+            dcp.ensure_tensor_saturation(actuator)
+            self._param_values = {
+                "stiffness": actuator.stiffness[:, j].clone(),
+                "damping": actuator.damping[:, j].clone(),
+                "velocity_limit": actuator.velocity_limit[:, j].clone(),
+                "effort_limit": actuator.effort_limit[:, j].clone(),
+                "saturation_effort": actuator._saturation_effort[:, j].clone(),
+                "armature": actuator.armature[:, j].clone(),
+                "friction": actuator.friction[:, j].clone(),
+                "dynamic_friction": actuator.dynamic_friction[:, j].clone(),
+                "viscous_friction": actuator.viscous_friction[:, j].clone(),
+            }
 
         # Decoupled solver velocity cap: hold velocity_limit_sim at a fixed high value so the tuned
         # `velocity_limit` only shapes the DCMotor torque-speed curve, never a hard brick-wall cap.
@@ -146,7 +177,8 @@ class ActuatorTuningEnv(DirectRLEnv):
 
     def _apply_param_values(self, env_ids: torch.Tensor):
         sub = {name: vals[env_ids] for name, vals in self._param_values.items()}
-        dcp.apply_params(self._robot, self.cfg.actuator_name, self._joint_idx, env_ids, sub)
+        mod = pdp if self._ideal_pd else dcp
+        mod.apply_params(self._robot, self.cfg.actuator_name, self._joint_idx, env_ids, sub)
 
     # ------------------------------------------------------------------
     # episode lifecycle
@@ -179,7 +211,8 @@ class ActuatorTuningEnv(DirectRLEnv):
         # record the state at the start of this control step (result of the previous target)
         self._sim_pos[:, k] = self._robot.data.joint_pos[:, self._joint_idx]
         self._sim_vel[:, k] = self._robot.data.joint_vel[:, self._joint_idx]
-        self._cur_target = self._target[k]
+        # drive the joint with the MLP-predicted target (ideal_pd) or the raw command (dc_motor)
+        self._cur_target = self._joint_target[k]
 
     def _apply_action(self) -> None:
         target = self._cur_target.reshape(1, 1).expand(self.num_envs, 1)
@@ -227,6 +260,14 @@ class ActuatorTuningEnv(DirectRLEnv):
     def get_last_sim_pos(self) -> np.ndarray:
         """Return the simulated positions from the most recently completed replay. Shape ``(E, N)``."""
         return self._last_sim_pos.detach().cpu().numpy()
+
+    def get_joint_target(self) -> np.ndarray:
+        """Return the per-step position target the joint is driven with (MLP rollout or command)."""
+        return self._joint_target_np
+
+    @property
+    def uses_mlp_target(self) -> bool:
+        return bool(self.cfg.actuator_model == "ideal_pd" and self.cfg.mlp_checkpoint)
 
     @property
     def num_ctrl_steps(self) -> int:

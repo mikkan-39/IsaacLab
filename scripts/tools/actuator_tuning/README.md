@@ -44,10 +44,11 @@ so the lag is measured **per segment** via a bounded cross-correlation (`--lag-m
 averaged -- a global cross-correlation across a step->sine boundary would be meaningless. Weight via
 `--lag-weight` (default 2.0; 0 disables).
 
-The real servo's measured transport lag (~4-16 ms; ~1 step at 50 Hz) is compensated by advancing
-the recorded real signal earlier by `--ref-lag-steps` (default 1) before scoring, so the fit is
-about the actuator *dynamics*, not the known comms delay. Note this removes the delay from the
-*comparison* only; for sim2real, re-introduce a 1-step command buffer on the deployed sim.
+`--ref-lag-steps` (default **0**, no compensation) advances the recorded real signal earlier by N
+control steps before scoring. Leave it at 0 for the IdealPD + MLP workflow (below), where the
+actuator's own lag is meant to re-create the real transport delay so the sim is compared against the
+*raw* recording. Set it >0 only when tuning the bare `DCMotor` against the command and you want to
+ignore the known ~4-16 ms comms delay.
 
 Per-step weights `w` emphasize the first ~300 ms after movement starts (2x) and direction
 reversals / sudden accelerations (2x). Velocity MSE is always logged but de-emphasized by
@@ -107,6 +108,43 @@ Outputs: `best_refined.json`, refreshed `plots/rank_*.png`.
 ```
 
 (All scripts default `--joint-name base_link_to_Neck_revolute`; pass `--joint-name <name>` to change it.)
+
+## Learned-actuator workflow (MLP + IdealPD)
+
+When the analytical `DCMotor` cannot match the servo's **frequency-dependent** lag (it lags more on
+fast motions, and the sim lag is roughly constant), use a learned model instead:
+
+1. **Train a servo MLP** (standalone, no Isaac Lab) that predicts the next position increment from a
+   window of the servo's own tracking-`error` and `velocity` history. The real position is shifted
+   back by the transport delay (`--ref-lag-steps`) during training, so the MLP learns the
+   **delay-free** dynamics (including the frequency-dependent lag).
+
+   The Isaac Python has `torch` but no `plotly`; plain Python has `plotly` but no `torch`, so it
+   runs in two steps:
+
+```powershell
+.\_isaac_sim\python.bat .\scripts\tools\actuator_tuning\train_servo_mlp.py --csv .\source\isaaclab_tasks\isaaclab_tasks\direct\actuator_tuning\data\servo_recording.csv --history 5 --epochs 300 --out-dir logs\actuator_tuning\mlp01
+python .\scripts\tools\actuator_tuning\train_servo_mlp.py --plot-npz logs\actuator_tuning\mlp01\rollout.npz
+```
+
+   Outputs: `servo_mlp.pt` (checkpoint), `mlp_fit.png`, `rollout.npz`, and (step 2) the interactive
+   `rollout.html`. Inspect the closed-loop rollout vs real before continuing.
+
+2. **Tune an IdealPD** to follow the MLP's (delay-free) predicted position. The PD's near-constant
+   lag re-introduces the transport delay, so the joint lands on the *raw* recorded trajectory. Pass
+   `--actuator-model ideal_pd --mlp-checkpoint <servo_mlp.pt>` to any of the run scripts and keep
+   `--ref-lag-steps 0`:
+
+```powershell
+.\isaaclab.bat -p .\scripts\tools\actuator_tuning\run_replay.py --actuator-model ideal_pd --mlp-checkpoint logs\actuator_tuning\mlp01\servo_mlp.pt --set stiffness=150 --set damping=8 --set armature=0.02
+.\isaaclab.bat -p .\scripts\tools\actuator_tuning\run_sample_search.py --headless --num-envs 64 --actuator-model ideal_pd --mlp-checkpoint logs\actuator_tuning\mlp01\servo_mlp.pt --search-yaml .\scripts\tools\actuator_tuning\ideal_pd_spec.example.yaml --output-dir logs\actuator_tuning\pd01
+```
+
+   The MLP is rolled out **closed-loop per 10 s segment** (warm-started from the recording in the
+   model's delay-free frame, then free-running) at env init and used as the joint's position target;
+   overlay plots add a green **MLP target** trace next to target / real / sim. Tunable IdealPD
+   params: `stiffness`, `damping`, `armature`, `effort_limit`, plus the friction triple. (Omitting
+   `--mlp-checkpoint` in `ideal_pd` mode drives the raw command instead -- a useful baseline.)
 
 ## Interactive plots (zoom/pan into fast bursts)
 
