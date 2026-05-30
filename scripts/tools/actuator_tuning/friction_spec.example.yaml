@@ -1,0 +1,12 @@
+# Example friction search spec (pass 2). Seeded from the pass-1 best parameters; only the
+# friction triple is searched here. Keep n_samples small to avoid exploding the search space.
+#
+# Friction in Isaac Sim 5.x is modeled as an effort (N-m), not a unitless coefficient.
+
+n_samples: 40
+method: latin_hypercube
+
+params:
+  friction: {low: 0.0, high: 0.3}           # static (Coulomb at rest)
+  dynamic_friction: {low: 0.0, high: 0.3}   # Coulomb during motion
+  viscous_friction: {low: 0.0, high: 0.1}   # velocity-proportional

@@ -88,12 +88,12 @@ RT_CFG = ArticulationCfg(
             joint_names_expr=[".*"],
             stiffness=28.1,
             damping=1.7,
-            armature=0.01,
             saturation_effort=1.96,
             effort_limit=1.96,
             effort_limit_sim=1.96,
             velocity_limit=11.1,
             velocity_limit_sim=11.1,
+            armature=0.01,
         ),
         # "ST3215-HS": ActuatorNetLSTMCfg(
         #     joint_names_expr=[".*"],

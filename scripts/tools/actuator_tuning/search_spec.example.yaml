@@ -1,0 +1,22 @@
+# Example search spec for actuator parameter tuning (pass 1: friction locked at 0).
+#
+# method: latin_hypercube (default) or random
+# Each param: low / high bounds; optional `log: true` to sample in log-space.
+# Only the params listed here are searched; everything else keeps the env default
+# (RTv4 DCMotor values, with friction = 0).
+
+n_samples: 300
+method: latin_hypercube
+
+params:
+  # PD gains: wide range, log-sampled (RTv4 defaults: stiffness 28.1, damping 1.7)
+  stiffness: {low: 5.0, high: 80.0, log: true}
+  damping: {low: 0.2, high: 10.0, log: true}
+
+  # DC motor torque-speed curve
+  saturation_effort: {low: 0.5, high: 3.0}
+  effort_limit: {low: 0.5, high: 3.0}     # effort_limit_sim is tied to this
+  velocity_limit: {low: 5.0, high: 15.0}  # velocity_limit_sim is tied to this
+
+  # joint inertia
+  armature: {low: 0.0, high: 0.1}

@@ -1,0 +1,98 @@
+# Actuator parameter tuning
+
+Replay a recorded real-servo trajectory on a **fixed-base** RT robot (same robot as RTv5,
+`RT_CFG`) and fit the simulated `DCMotor` parameters so the virtual joint tracks the real one.
+
+- Environment: `Isaac-Actuator-Tuning-RT-v0`
+  (`source/isaaclab_tasks/isaaclab_tasks/direct/actuator_tuning/`)
+- Recording shipped at: `.../direct/actuator_tuning/data/servo_recording.csv`
+  (columns: `timestamp,target_rad,position_rad,error_rad,speed_rad_s`)
+
+## How it works
+
+- The robot base link is fully fixed (`fix_root_link=True`). One joint (`--joint-name`,
+  exact USD name) replays the recorded `target_rad` at a configurable control rate
+  (default 50 Hz via `decimation`); all other joints are frozen at their defaults.
+- The recording (50-1000 Hz) is downsampled to the control rate with a zero-order hold
+  (no interpolation). Replay starts at the first measured `position_rad`.
+- Each parallel environment holds a different `DCMotor` parameter vector but replays the
+  **same** trajectory, so a whole population is evaluated in one headless sim.
+
+## Scoring (position-first)
+
+```
+weighted_pos_mse = sum(w * (sim_pos - real_pos)^2) / sum(w)
+tracking         = position_only: weighted_pos_mse
+                   position_heavy: 0.9*pos + 0.1*vel
+                   balanced:       0.7*pos + 0.3*vel
+score            = 0.8 * tracking + 0.2 * max_abs_pos_error      # lower is better
+```
+
+Per-step weights `w` emphasize the first ~300 ms after movement starts (2x) and direction
+reversals / sudden accelerations (2x). Velocity MSE is always logged but de-emphasized by
+default (`--score-mode position_only`), because differentiated encoder velocity is noisy.
+
+## Workflow
+
+1. Visual sanity check (single param set, GUI + overlay plot):
+
+```bash
+./isaaclab.sh -p scripts/tools/actuator_tuning/run_replay.py \
+    --joint-name "<exact_usd_joint_name>" \
+    --params '{"stiffness": 28.1, "damping": 1.7, "effort_limit": 1.96, "velocity_limit": 11.1, "saturation_effort": 1.96, "armature": 0.01}'
+```
+
+2. Pass 1 - LHS/random search (friction locked at 0), headless, parallel:
+
+```bash
+./isaaclab.sh -p scripts/tools/actuator_tuning/run_sample_search.py --headless \
+    --joint-name "<exact_usd_joint_name>" --num-envs 64 \
+    --search-yaml scripts/tools/actuator_tuning/search_spec.example.yaml \
+    --output-dir logs/actuator_tuning/run01
+```
+
+Outputs: `sample_results.csv` (ranked), `best_grid.json`, `plots/rank_*.png`.
+
+3. Refine the top-k with local optimization (scipy Nelder-Mead):
+
+```bash
+./isaaclab.sh -p scripts/tools/actuator_tuning/run_refine.py --headless \
+    --joint-name "<exact_usd_joint_name>" \
+    --results logs/actuator_tuning/run01/sample_results.csv \
+    --search-yaml scripts/tools/actuator_tuning/search_spec.example.yaml \
+    --output-dir logs/actuator_tuning/run01 --top-k 5
+```
+
+Outputs: `best_refined.json`, refreshed `plots/rank_*.png`.
+
+4. (Optional) Pass 2 - unlock friction, only if reversals still mismatch:
+
+```bash
+./isaaclab.sh -p scripts/tools/actuator_tuning/run_friction_pass.py --headless \
+    --joint-name "<exact_usd_joint_name>" \
+    --seed-params logs/actuator_tuning/run01/best_refined.json \
+    --search-yaml scripts/tools/actuator_tuning/friction_spec.example.yaml \
+    --output-dir logs/actuator_tuning/run01_friction \
+    --reversal-mse-threshold 0.01
+```
+
+Skips automatically if the seed's `reversal_pos_mse` is below the threshold (use `--force`
+to run regardless).
+
+## Tunable parameters
+
+Pass 1 (free): `stiffness`, `damping`, `velocity_limit`, `effort_limit`, `saturation_effort`,
+`armature`. Coupling enforced: `effort_limit == effort_limit_sim`,
+`velocity_limit == velocity_limit_sim`.
+
+Pass 2 (free): `friction`, `dynamic_friction`, `viscous_friction` (seeded from pass-1 best).
+
+Edit the `*_spec.example.yaml` files to change bounds, `n_samples`, or sampling `method`
+(`latin_hypercube` or `random`); per-param `log: true` samples in log-space.
+
+## Tips
+
+- Use `--max-duration-s` to fit on a short slice first (much faster iteration).
+- The full recording is ~150 s; at 50 Hz that is ~7500 control steps per replay.
+- Always eyeball `plots/rank_*.png` (target vs real vs sim): a good score can still hide a
+  wrong-shape trajectory near startup/reversals.
