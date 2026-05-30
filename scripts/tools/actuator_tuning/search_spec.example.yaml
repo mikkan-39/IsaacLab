@@ -5,18 +5,21 @@
 # Only the params listed here are searched; everything else keeps the env default
 # (RTv4 DCMotor values, with friction = 0).
 
-n_samples: 300
+n_samples: 2048
 method: latin_hypercube
 
 params:
   # PD gains: wide range, log-sampled (RTv4 defaults: stiffness 28.1, damping 1.7)
-  stiffness: {low: 5.0, high: 80.0, log: true}
-  damping: {low: 0.2, high: 10.0, log: true}
+  stiffness: {low: 10.0, high: 100.0, log: true}
+  damping: {low: 1.0, high: 100.0, log: true}
 
   # DC motor torque-speed curve
   saturation_effort: {low: 0.5, high: 3.0}
-  effort_limit: {low: 0.5, high: 3.0}     # effort_limit_sim is tied to this
-  velocity_limit: {low: 5.0, high: 15.0}  # velocity_limit_sim is tied to this
+  # effort_limit: {low: 0.5, high: 3.0}     # effort_limit_sim is tied to this
+  velocity_limit: {low: 10.0, high: 15.0}  # velocity_limit_sim is tied to this
 
   # joint inertia
-  armature: {low: 0.0, high: 0.1}
+  armature: {low: 0.0, high: 0.3}
+
+  # friction
+  friction: {low: 0.0, high: 0.3}           # static (Coulomb at rest)

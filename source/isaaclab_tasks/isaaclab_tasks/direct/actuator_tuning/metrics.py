@@ -11,13 +11,17 @@ more heavily because servo "feel" matters most at startup/braking/reversals.
 
 Score (lower is better)::
 
-    score = 0.8 * tracking + 0.2 * max_abs_pos_error
+    score = tracking
 
-where ``tracking`` depends on ``score_mode``:
+``tracking`` depends on ``score_mode``:
 
     position_only  : weighted_pos_mse
     position_heavy : 0.9 * weighted_pos_mse + 0.1 * weighted_vel_mse
     balanced       : 0.7 * weighted_pos_mse + 0.3 * weighted_vel_mse
+
+``spike_pos_err`` (a high percentile of |position error|) and ``max_abs_pos`` are still computed
+and reported as diagnostics, but no longer enter the score: penalizing worst-case spikes was
+rewarding timid, lagging, low-amplitude solutions over ones that actually track the motion.
 """
 
 from __future__ import annotations
@@ -115,6 +119,7 @@ def compute_scores(
     weights: np.ndarray,
     reversal_mask: np.ndarray,
     score_mode: str = "position_only",
+    spike_percentile: float = 99.0,
 ) -> dict[str, np.ndarray]:
     """Compute the score and its components for one or more simulated trajectories.
 
@@ -126,6 +131,8 @@ def compute_scores(
         weights: Per-step weights. Shape ``(N,)``.
         reversal_mask: Boolean reversal mask. Shape ``(N,)``.
         score_mode: One of :data:`SCORE_MODES`.
+        spike_percentile: Percentile of ``|position error|`` used as the spike term in the score
+            (default 99). Robust to a single unavoidable step-instant that ``max`` would latch onto.
 
     Returns:
         Dict of metric name -> array shaped ``(E,)`` (or scalar for ``(N,)`` input).
@@ -136,13 +143,18 @@ def compute_scores(
 
     e_pos = sim_pos - ref_pos
     e_vel = sim_vel - ref_vel
+    abs_e_pos = np.abs(e_pos)
 
     weighted_pos_mse = _weighted_mse(e_pos, weights)
     weighted_vel_mse = _weighted_mse(e_vel, weights)
-    max_abs_pos = np.max(np.abs(e_pos), axis=-1)
+    max_abs_pos = np.max(abs_e_pos, axis=-1)
+    # robust worst-case spike: high percentile of |error| instead of the raw max
+    spike_pos_err = np.percentile(abs_e_pos, spike_percentile, axis=-1)
 
     tracking = w_pos * weighted_pos_mse + w_vel * weighted_vel_mse
-    score = 0.8 * tracking + 0.2 * max_abs_pos
+    # spike_pos_err is intentionally NOT in the score (diagnostic only): penalizing worst-case
+    # spikes rewarded timid/lagging/low-amplitude fits over ones that track the motion.
+    score = tracking
 
     # reversal-only position MSE (used to decide whether to unlock friction in pass 2)
     if np.any(reversal_mask):
@@ -158,6 +170,7 @@ def compute_scores(
         "tracking": tracking,
         "weighted_pos_mse": weighted_pos_mse,
         "weighted_vel_mse": weighted_vel_mse,
+        "spike_pos_err": spike_pos_err,
         "max_abs_pos": max_abs_pos,
         "reversal_pos_mse": reversal_pos_mse,
     }

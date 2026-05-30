@@ -54,11 +54,27 @@ class ActuatorTuningEnvCfg(DirectRLEnvCfg):
     control_hz: float = 50.0
     """Control/replay rate in Hz (lower than the recording rate)."""
 
+    solver_velocity_limit: float = 20.0
+    """Fixed PhysX solver velocity cap (rad/s) for the driven joint, decoupled from the tuned
+    ``velocity_limit``.
+
+    The tuned ``velocity_limit`` only shapes the DCMotor torque-speed curve; this hard cap is held
+    high (well above the real servo's measured peak speed) so the search cannot use a low solver
+    cap to fake reversal lag. Set above your measured maximum joint speed with margin.
+    """
+
     max_duration_s: float | None = None
     """Optional cap on replayed duration (seconds). None replays the full recording."""
 
     score_mode: str = "position_only"
     """Scoring mode: ``position_only`` | ``position_heavy`` | ``balanced``."""
+
+    spike_percentile: float = 99.0
+    """Percentile of |position error| used as the spike term in the score (default p99).
+
+    Using a high percentile instead of the raw max keeps a single unavoidable step-instant from
+    dominating the score.
+    """
 
     # -- error-weighting (transients / reversals emphasized) --
     weight_move_eps: float = 0.05

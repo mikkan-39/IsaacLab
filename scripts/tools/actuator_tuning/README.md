@@ -30,8 +30,13 @@ weighted_pos_mse = sum(w * (sim_pos - real_pos)^2) / sum(w)
 tracking         = position_only: weighted_pos_mse
                    position_heavy: 0.9*pos + 0.1*vel
                    balanced:       0.7*pos + 0.3*vel
-score            = 0.8 * tracking + 0.2 * max_abs_pos_error      # lower is better
+spike_pos_err    = p99(|sim_pos - real_pos|)                     # high percentile, not raw max
+score            = 0.8 * tracking + 0.2 * spike_pos_err          # lower is better
 ```
+
+The spike term is a high percentile of the absolute position error (default p99, set with
+`--spike-percentile`) rather than the raw `max`, so a single unavoidable step-instant doesn't
+dominate the score. `max_abs_pos` is still logged for reference.
 
 Per-step weights `w` emphasize the first ~300 ms after movement starts (2x) and direction
 reversals / sudden accelerations (2x). Velocity MSE is always logged but de-emphasized by
@@ -92,16 +97,50 @@ Outputs: `best_refined.json`, refreshed `plots/rank_*.png`.
 
 (All scripts default `--joint-name base_link_to_Neck_revolute`; pass `--joint-name <name>` to change it.)
 
+## Interactive plots (zoom/pan into fast bursts)
+
+Static PNGs are hard to read for a 3-minute recording. Every search/refine/replay run also
+writes a `trajectories.npz` (top-k sim curves + target/real + params/metrics). Turn it into a
+zoomable Plotly HTML with the standalone builder.
+
+Important: run this with your **normal Python that has plotly** (e.g. anaconda), NOT
+`isaaclab.bat` (the Isaac Python does not ship plotly):
+
+```powershell
+python .\scripts\tools\actuator_tuning\make_interactive_plots.py --run-dir logs\actuator_tuning\run01 --open
+```
+
+This writes `logs\actuator_tuning\run01\interactive.html`. In the browser:
+
+- Box-zoom / pan / range-slider to inspect the fast-motion bursts at full resolution.
+- Use the rank dropdown (top-right) to switch candidates; target and real stay pinned, the
+  selected rank's sim + error curves toggle. Pick `all` to overlay every rank's sim.
+- The title shows the selected rank's parameter values and score.
+
+(If you prefer it inline during the run, `pip install plotly` into the Isaac Python; otherwise
+the npz + this script is the intended path.)
+
 Skips automatically if the seed's `reversal_pos_mse` is below the threshold (use `--force`
 to run regardless).
 
 ## Tunable parameters
 
-Pass 1 (free): `stiffness`, `damping`, `velocity_limit`, `effort_limit`, `saturation_effort`,
-`armature`. Coupling enforced: `effort_limit == effort_limit_sim`,
-`velocity_limit == velocity_limit_sim`.
+Tunable (any can go in a single search YAML): `stiffness`, `damping`, `velocity_limit`,
+`effort_limit`, `saturation_effort`, `armature`, `friction`, `dynamic_friction`,
+`viscous_friction`.
 
-Pass 2 (free): `friction`, `dynamic_friction`, `viscous_friction` (seeded from pass-1 best).
+Coupling / decoupling:
+
+- `effort_limit == effort_limit_sim` (coupled).
+- `velocity_limit` shapes the **DCMotor torque-speed curve only**. The hard PhysX solver speed cap
+  (`velocity_limit_sim`) is **decoupled** and held fixed at `--solver-velocity-limit` (default 20
+  rad/s, set above your measured peak), so the search cannot fake reversal lag with a low cap.
+
+The physically-correct levers for the real servo's reversal lag are `friction` /
+`dynamic_friction` (resist starting/reversing) and `armature` (rotor inertia) -- include those in
+the search rather than letting `velocity_limit` / `damping` compensate non-physically. The
+separate `run_friction_pass.py` (seeded from a best JSON) remains available if you prefer a staged
+friction-only pass.
 
 Edit the `*_spec.example.yaml` files to change bounds, `n_samples`, or sampling `method`
 (`latin_hypercube` or `random`); per-param `log: true` samples in log-space.

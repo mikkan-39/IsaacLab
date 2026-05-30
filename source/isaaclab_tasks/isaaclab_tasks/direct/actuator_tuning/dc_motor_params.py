@@ -9,10 +9,12 @@ Each environment in the vectorized scene holds a *different* parameter vector bu
 *same* trajectory. This module writes a batch of parameter values into both the explicit
 :class:`~isaaclab.actuators.DCMotor` model tensors and the physics solver (where required).
 
-Coupled fields (enforced by the search space, mirrored here defensively):
+Field coupling:
 
 * ``effort_limit`` and ``effort_limit_sim`` share their value.
-* ``velocity_limit`` and ``velocity_limit_sim`` share their value.
+* ``velocity_limit`` shapes the DCMotor torque-speed curve only. ``velocity_limit_sim`` (the hard
+  PhysX solver speed cap) is decoupled and held at a fixed high value by the env, so the search
+  cannot abuse it as a brick-wall cap that fakes the real servo's reversal lag.
 """
 
 from __future__ import annotations
@@ -81,12 +83,12 @@ def apply_params(
         actuator.effort_limit_sim[env_ids, jslice] = v
         robot.write_joint_effort_limit_to_sim(v, joint_ids=joint_ids, env_ids=env_ids)
 
-    # --- velocity limit; velocity_limit_sim shares the value ---
+    # --- velocity limit: shapes the DCMotor torque-speed curve ONLY ---
+    # velocity_limit_sim (the hard PhysX solver cap) is intentionally NOT written here. It is held
+    # at a fixed high/physical value by the env (see ActuatorTuningEnv) so the search cannot abuse
+    # it as a brick-wall speed cap. Only the torque-speed-curve no-load speed is tuned.
     if "velocity_limit" in params:
-        v = col("velocity_limit")
-        actuator.velocity_limit[env_ids, jslice] = v
-        actuator.velocity_limit_sim[env_ids, jslice] = v
-        robot.write_joint_velocity_limit_to_sim(v, joint_ids=joint_ids, env_ids=env_ids)
+        actuator.velocity_limit[env_ids, jslice] = col("velocity_limit")
 
     # --- armature (physics solver parameter) ---
     if "armature" in params:
@@ -94,21 +96,19 @@ def apply_params(
         actuator.armature[env_ids, jslice] = v
         robot.write_joint_armature_to_sim(v, joint_ids=joint_ids, env_ids=env_ids)
 
-    # --- friction triple (pass 2) ---
+    # --- friction triple ---
+    # PhysX requires static friction >= dynamic friction. The search samples these coefficients
+    # independently, so clamp dynamic down to static here (per env) to keep every batch valid.
     fric = {k: params[k] for k in FRICTION_PARAMS if k in params}
     if fric:
-        static = col("friction") if "friction" in fric else None
-        dyn = col("dynamic_friction") if "dynamic_friction" in fric else None
+        static = col("friction") if "friction" in fric else actuator.friction[env_ids, jslice]
+        dyn = col("dynamic_friction") if "dynamic_friction" in fric else actuator.dynamic_friction[env_ids, jslice]
+        dyn = torch.minimum(dyn, static)
         vis = col("viscous_friction") if "viscous_friction" in fric else None
-        if static is not None:
-            actuator.friction[env_ids, jslice] = static
-        if dyn is not None:
-            actuator.dynamic_friction[env_ids, jslice] = dyn
+        actuator.friction[env_ids, jslice] = static
+        actuator.dynamic_friction[env_ids, jslice] = dyn
         if vis is not None:
             actuator.viscous_friction[env_ids, jslice] = vis
-        # static must be provided to the combined write; fall back to current buffer value
-        if static is None:
-            static = actuator.friction[env_ids, jslice]
         robot.write_joint_friction_coefficient_to_sim(
             static,
             joint_dynamic_friction_coeff=dyn,

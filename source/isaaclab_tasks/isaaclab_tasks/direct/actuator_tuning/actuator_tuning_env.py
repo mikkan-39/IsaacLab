@@ -97,6 +97,14 @@ class ActuatorTuningEnv(DirectRLEnv):
             "viscous_friction": actuator.viscous_friction[:, j].clone(),
         }
 
+        # Decoupled solver velocity cap: hold velocity_limit_sim at a fixed high value so the tuned
+        # `velocity_limit` only shapes the DCMotor torque-speed curve, never a hard brick-wall cap.
+        cap = float(cfg.solver_velocity_limit)
+        actuator.velocity_limit_sim[:, j] = cap
+        self._robot.write_joint_velocity_limit_to_sim(
+            torch.full((self.num_envs, 1), cap, device=self.device), joint_ids=[j]
+        )
+
         # persistent results from the most recently completed replay (not cleared by reset)
         self.last_scores: dict[str, np.ndarray] = {}
 
@@ -205,6 +213,7 @@ class ActuatorTuningEnv(DirectRLEnv):
             self._weights_np,
             self._reversal_np,
             score_mode=self.cfg.score_mode,
+            spike_percentile=self.cfg.spike_percentile,
         )
 
     def get_last_sim_pos(self) -> np.ndarray:

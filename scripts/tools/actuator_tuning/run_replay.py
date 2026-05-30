@@ -35,9 +35,18 @@ parser.add_argument(
 )
 parser.add_argument("--keep-usd-limits", action="store_true", help="Keep the USD joint limits (no widening).")
 parser.add_argument("--control-hz", type=float, default=50.0, help="Replay/control rate in Hz.")
+parser.add_argument(
+    "--solver-velocity-limit",
+    type=float,
+    default=20.0,
+    help="Fixed PhysX solver speed cap (rad/s), decoupled from the tuned velocity_limit.",
+)
 parser.add_argument("--decimation", type=int, default=None, help="Physics steps per control step (optional).")
 parser.add_argument("--max-duration-s", type=float, default=None, help="Cap replayed duration (seconds).")
 parser.add_argument("--score-mode", type=str, default="position_only", help="position_only|position_heavy|balanced.")
+parser.add_argument(
+    "--spike-percentile", type=float, default=99.0, help="Percentile of |pos error| used as the spike term (default 99)."
+)
 parser.add_argument(
     "--params",
     type=str,
@@ -118,10 +127,12 @@ def build_cfg() -> ActuatorTuningEnvCfg:
     if args_cli.csv is not None:
         cfg.csv_path = args_cli.csv
     cfg.control_hz = args_cli.control_hz
+    cfg.solver_velocity_limit = args_cli.solver_velocity_limit
     if args_cli.decimation is not None:
         cfg.decimation = args_cli.decimation
     cfg.max_duration_s = args_cli.max_duration_s
     cfg.score_mode = args_cli.score_mode
+    cfg.spike_percentile = args_cli.spike_percentile
     cfg.scene.num_envs = args_cli.num_envs
     if args_cli.keep_usd_limits:
         cfg.override_joint_pos_limits = None
@@ -167,6 +178,20 @@ def main():
         metrics=scores,
     )
     print(f"[replay] saved overlay plot to: {out}")
+
+    npz = os.path.join(os.path.dirname(os.path.abspath(args_cli.out)), "trajectories.npz")
+    plotting.save_trajectories_npz(
+        npz,
+        traj.t_rel,
+        traj.target,
+        traj.ref_pos,
+        sim_pos,
+        param_names=list(params.keys()) if params else None,
+        params=np.array([[params[k] for k in params]]) if params else None,
+        metric_names=list(scores.keys()),
+        metrics=np.array([[scores[k] for k in scores]]),
+    )
+    print(f"[replay] saved trajectories to: {npz}  (build interactive HTML with make_interactive_plots.py)")
 
     env.close()
 

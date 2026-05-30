@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import os
 
+import numpy as np
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -58,7 +60,7 @@ def save_overlay(
     if metrics:
         annot = "  ".join(
             f"{k}={metrics[k]:.4g}"
-            for k in ("score", "weighted_pos_mse", "max_abs_pos", "reversal_pos_mse")
+            for k in ("score", "weighted_pos_mse", "spike_pos_err", "max_abs_pos", "reversal_pos_mse")
             if k in metrics
         )
         full_title = f"{title}\n{annot}" if title else annot
@@ -75,4 +77,56 @@ def save_overlay(
     fig.tight_layout()
     fig.savefig(path, dpi=120)
     plt.close(fig)
+    return path
+
+
+def save_trajectories_npz(
+    path: str,
+    t_rel,
+    target,
+    ref_pos,
+    sim_pos,
+    *,
+    param_names=None,
+    params=None,
+    metric_names=None,
+    metrics=None,
+) -> str:
+    """Persist top-k trajectories (and their params/metrics) for offline interactive plotting.
+
+    The arrays are saved with numpy only (works in the Isaac Python env, which lacks plotly).
+    Regenerate interactive HTML from this file with ``scripts/tools/actuator_tuning/make_interactive_plots.py``
+    using a Python that has plotly installed.
+
+    Args:
+        path: Output ``.npz`` path.
+        t_rel: Time axis (s), shape ``(N,)``.
+        target: Commanded trajectory, shape ``(N,)``.
+        ref_pos: Real measured trajectory, shape ``(N,)``.
+        sim_pos: Simulated trajectories, shape ``(K, N)`` (best-first) or ``(N,)``.
+        param_names: Optional list of searched parameter names.
+        params: Optional array ``(K, P)`` of parameter values per candidate.
+        metric_names: Optional list of metric names.
+        metrics: Optional array ``(K, M)`` of metric values per candidate.
+
+    Returns:
+        The output path.
+    """
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    sim_pos = np.atleast_2d(np.asarray(sim_pos))
+    data = {
+        "t_rel": np.asarray(t_rel, dtype=np.float64),
+        "target": np.asarray(target, dtype=np.float64),
+        "ref_pos": np.asarray(ref_pos, dtype=np.float64),
+        "sim_pos": sim_pos.astype(np.float64),
+    }
+    if param_names is not None:
+        data["param_names"] = np.asarray(list(param_names), dtype=object)
+    if params is not None:
+        data["params"] = np.asarray(params, dtype=np.float64)
+    if metric_names is not None:
+        data["metric_names"] = np.asarray(list(metric_names), dtype=object)
+    if metrics is not None:
+        data["metrics"] = np.asarray(metrics, dtype=np.float64)
+    np.savez(path, **data)
     return path

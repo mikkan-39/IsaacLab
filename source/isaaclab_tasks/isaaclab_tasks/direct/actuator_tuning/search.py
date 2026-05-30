@@ -20,6 +20,7 @@ METRIC_KEYS = (
     "tracking",
     "weighted_pos_mse",
     "weighted_vel_mse",
+    "spike_pos_err",
     "max_abs_pos",
     "reversal_pos_mse",
 )
@@ -73,7 +74,20 @@ def sample_params(spec: dict, seed: int = 0) -> tuple[list[str], np.ndarray]:
             samples[:, i] = np.exp(np.log(low) + unit[:, i] * (np.log(high) - np.log(low)))
         else:
             samples[:, i] = low + unit[:, i] * (high - low)
+    _enforce_friction_constraint(names, samples)
     return names, samples
+
+
+def _enforce_friction_constraint(names: list[str], samples: np.ndarray) -> None:
+    """Clamp ``dynamic_friction`` <= ``friction`` in-place.
+
+    PhysX requires static friction >= dynamic friction; the sampler draws them independently, so we
+    project invalid pairs onto the boundary here (matching the guard applied in the env) so the
+    recorded samples are exactly what gets simulated.
+    """
+    if "friction" in names and "dynamic_friction" in names:
+        fi, di = names.index("friction"), names.index("dynamic_friction")
+        np.minimum(samples[:, di], samples[:, fi], out=samples[:, di])
 
 
 def bounds_from_spec(spec: dict, names: list[str]) -> list[tuple[float, float]]:
@@ -193,6 +207,20 @@ def plot_topk(
             metrics=metrics_row,
         )
         paths.append(path)
+
+    # dump trajectories for offline interactive (plotly) plotting
+    metrics_arr = np.stack([res[key][:k] for key in METRIC_KEYS], axis=1)
+    plotting.save_trajectories_npz(
+        os.path.join(out_dir, "trajectories.npz"),
+        traj.t_rel,
+        traj.target,
+        traj.ref_pos,
+        sim_pos[:k],
+        param_names=param_names,
+        params=top,
+        metric_names=list(METRIC_KEYS),
+        metrics=metrics_arr,
+    )
     return paths
 
 
