@@ -62,6 +62,14 @@ class ActuatorTuningEnv(DirectRLEnv):
             )
         self._joint_idx = int(joint_ids[0])
 
+        # widen the (tight) USD joint position limits so replayed targets are never clipped
+        if cfg.override_joint_pos_limits is not None:
+            lo, hi = cfg.override_joint_pos_limits
+            limits = torch.empty(self.num_envs, self._robot.num_joints, 2, device=self.device)
+            limits[..., 0] = lo
+            limits[..., 1] = hi
+            self._robot.write_joint_position_limit_to_sim(limits, warn_limit_violation=False)
+
         # device-side trajectory tensors
         self._target = torch.as_tensor(self.trajectory.target, dtype=torch.float32, device=self.device)
         self._ref_pos = torch.as_tensor(self.trajectory.ref_pos, dtype=torch.float32, device=self.device)

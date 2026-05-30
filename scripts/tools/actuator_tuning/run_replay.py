@@ -20,14 +20,38 @@ from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Replay a servo recording and plot sim vs. real.")
 parser.add_argument("--task", type=str, default="Isaac-Actuator-Tuning-RT-v0", help="Registered task id.")
-parser.add_argument("--joint-name", type=str, required=True, help="Exact USD joint name to drive.")
+parser.add_argument(
+    "--joint-name", type=str, default="base_link_to_Neck_revolute", help="Exact USD joint name to drive."
+)
 parser.add_argument("--csv", type=str, default=None, help="Path to the recording CSV (defaults to packaged file).")
 parser.add_argument("--num-envs", type=int, default=1, help="Number of parallel envs (1 for a clean GUI replay).")
+parser.add_argument(
+    "--joint-pos-limit",
+    type=float,
+    nargs=2,
+    default=None,
+    metavar=("LOW", "HIGH"),
+    help="Override every joint's position limit with this range (rad). Default widens to +/- pi.",
+)
+parser.add_argument("--keep-usd-limits", action="store_true", help="Keep the USD joint limits (no widening).")
 parser.add_argument("--control-hz", type=float, default=50.0, help="Replay/control rate in Hz.")
 parser.add_argument("--decimation", type=int, default=None, help="Physics steps per control step (optional).")
 parser.add_argument("--max-duration-s", type=float, default=None, help="Cap replayed duration (seconds).")
 parser.add_argument("--score-mode", type=str, default="position_only", help="position_only|position_heavy|balanced.")
-parser.add_argument("--params", type=str, default=None, help="JSON dict of DCMotor params to apply.")
+parser.add_argument(
+    "--params",
+    type=str,
+    default=None,
+    help="DCMotor params as a JSON dict, OR a path to a .json file. On PowerShell prefer --set.",
+)
+parser.add_argument(
+    "--set",
+    dest="set_params",
+    action="append",
+    default=None,
+    metavar="NAME=VALUE",
+    help="Set one DCMotor param (repeatable), e.g. --set stiffness=28.1 --set damping=1.7. Quote-free.",
+)
 parser.add_argument("--out", type=str, default="logs/actuator_tuning/replay_overlay.png", help="Output plot path.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
@@ -38,6 +62,8 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import json
+import os
+
 import numpy as np
 import torch
 
@@ -46,6 +72,44 @@ import gymnasium as gym
 import isaaclab_tasks  # noqa: F401  (registers the task)
 from isaaclab_tasks.direct.actuator_tuning import plotting
 from isaaclab_tasks.direct.actuator_tuning.actuator_tuning_env_cfg import ActuatorTuningEnvCfg
+
+
+def parse_params() -> dict[str, float]:
+    """Collect DCMotor params from --params (JSON string or file) and/or --set NAME=VALUE pairs.
+
+    PowerShell tends to strip the inner double quotes from a ``--params`` JSON string, so this
+    parser is tolerant (it accepts Python/relaxed dict syntax) and ``--set`` is the quote-free path.
+    """
+    params: dict[str, float] = {}
+
+    raw = args_cli.params
+    if raw:
+        text = raw
+        if os.path.isfile(raw):
+            with open(raw, "r") as f:
+                text = f.read()
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            # tolerate PowerShell-mangled / Python-style input: quote bare keys, single->double quotes
+            import ast
+            import re
+
+            fixed = text.replace("'", '"')
+            fixed = re.sub(r"([{,]\s*)([A-Za-z_][A-Za-z0-9_]*)(\s*:)", r'\1"\2"\3', fixed)
+            try:
+                parsed = json.loads(fixed)
+            except json.JSONDecodeError:
+                parsed = ast.literal_eval(text)
+        params.update({str(k): float(v) for k, v in parsed.items()})
+
+    for item in args_cli.set_params or []:
+        if "=" not in item:
+            raise ValueError(f"--set expects NAME=VALUE, got '{item}'.")
+        name, value = item.split("=", 1)
+        params[name.strip()] = float(value)
+
+    return params
 
 
 def build_cfg() -> ActuatorTuningEnvCfg:
@@ -59,6 +123,10 @@ def build_cfg() -> ActuatorTuningEnvCfg:
     cfg.max_duration_s = args_cli.max_duration_s
     cfg.score_mode = args_cli.score_mode
     cfg.scene.num_envs = args_cli.num_envs
+    if args_cli.keep_usd_limits:
+        cfg.override_joint_pos_limits = None
+    elif args_cli.joint_pos_limit is not None:
+        cfg.override_joint_pos_limits = tuple(args_cli.joint_pos_limit)
     # re-run post-init so sim.dt / robot reflect CLI overrides
     cfg.__post_init__()
     return cfg
@@ -68,8 +136,9 @@ def main():
     cfg = build_cfg()
     env = gym.make(args_cli.task, cfg=cfg).unwrapped
 
-    if args_cli.params:
-        params = json.loads(args_cli.params)
+    params = parse_params()
+    if params:
+        print(f"[replay] applying params: {params}")
         batch = {k: np.full(env.num_envs, float(v)) for k, v in params.items()}
         env.set_param_batch(batch)
 

@@ -22,9 +22,20 @@ from isaaclab.app import AppLauncher
 
 parser = argparse.ArgumentParser(description="Refine top-k actuator candidates with scipy.optimize.")
 parser.add_argument("--task", type=str, default="Isaac-Actuator-Tuning-RT-v0", help="Registered task id.")
-parser.add_argument("--joint-name", type=str, required=True, help="Exact USD joint name to drive.")
+parser.add_argument(
+    "--joint-name", type=str, default="base_link_to_Neck_revolute", help="Exact USD joint name to drive."
+)
 parser.add_argument("--csv", type=str, default=None, help="Path to the recording CSV (defaults to packaged file).")
 parser.add_argument("--results", type=str, required=True, help="sample_results.csv from the search pass.")
+parser.add_argument(
+    "--joint-pos-limit",
+    type=float,
+    nargs=2,
+    default=None,
+    metavar=("LOW", "HIGH"),
+    help="Override every joint's position limit with this range (rad). Default widens to +/- pi.",
+)
+parser.add_argument("--keep-usd-limits", action="store_true", help="Keep the USD joint limits (no widening).")
 parser.add_argument("--search-yaml", type=str, default=None, help="Search spec YAML (for bounds). Optional.")
 parser.add_argument("--control-hz", type=float, default=50.0, help="Replay/control rate in Hz.")
 parser.add_argument("--decimation", type=int, default=None, help="Physics steps per control step (optional).")
@@ -63,6 +74,10 @@ def build_cfg(num_envs: int) -> ActuatorTuningEnvCfg:
     cfg.max_duration_s = args_cli.max_duration_s
     cfg.score_mode = args_cli.score_mode
     cfg.scene.num_envs = num_envs
+    if args_cli.keep_usd_limits:
+        cfg.override_joint_pos_limits = None
+    elif args_cli.joint_pos_limit is not None:
+        cfg.override_joint_pos_limits = tuple(args_cli.joint_pos_limit)
     cfg.__post_init__()
     return cfg
 

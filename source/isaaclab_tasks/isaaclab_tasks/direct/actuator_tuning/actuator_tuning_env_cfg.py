@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import copy
+import math
 import os
 from dataclasses import MISSING
 
@@ -33,8 +34,16 @@ class ActuatorTuningEnvCfg(DirectRLEnvCfg):
     """
 
     # -- replay / scoring settings --
-    joint_name: str = MISSING
+    joint_name: str = "base_link_to_Neck_revolute"
     """Exact USD joint name to drive with the recorded targets."""
+
+    override_joint_pos_limits: tuple[float, float] | None = (-math.pi, math.pi)
+    """If set, overwrite every joint's position limits with this (low, high) range in radians.
+
+    The RT USD ships tight angular limits on its joints. For trajectory replay/identification we
+    widen them (default +/- pi) so the recorded targets are never clipped by the solver. Set to
+    None to keep the USD limits.
+    """
 
     csv_path: str = _DEFAULT_CSV
     """Path to the servo recording CSV."""

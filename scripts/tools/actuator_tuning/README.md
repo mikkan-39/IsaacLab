@@ -11,8 +11,13 @@ Replay a recorded real-servo trajectory on a **fixed-base** RT robot (same robot
 ## How it works
 
 - The robot base link is fully fixed (`fix_root_link=True`). One joint (`--joint-name`,
-  exact USD name) replays the recorded `target_rad` at a configurable control rate
-  (default 50 Hz via `decimation`); all other joints are frozen at their defaults.
+  exact USD name, default `base_link_to_Neck_revolute`) replays the recorded `target_rad` at a
+  configurable control rate (default 50 Hz via `decimation`); all other joints are frozen at
+  their defaults.
+- The RT USD ships tight angular limits on its joints. By default every joint's position limit
+  is widened to +/- pi so replayed targets are never clipped by the solver. Use
+  `--joint-pos-limit LOW HIGH` to set a custom range, or `--keep-usd-limits` to keep the USD
+  limits.
 - The recording (50-1000 Hz) is downsampled to the control rate with a zero-order hold
   (no interpolation). Replay starts at the first measured `position_rad`.
 - Each parallel environment holds a different `DCMotor` parameter vector but replays the
@@ -32,49 +37,60 @@ Per-step weights `w` emphasize the first ~300 ms after movement starts (2x) and 
 reversals / sudden accelerations (2x). Velocity MSE is always logged but de-emphasized by
 default (`--score-mode position_only`), because differentiated encoder velocity is noisy.
 
+> Windows / PowerShell notes
+>
+> - Use `.\isaaclab.bat -p .\scripts\tools\...` instead of `./isaaclab.sh -p scripts/tools/...`.
+> - PowerShell mangles inline JSON (it strips the inner `"`), so for `run_replay.py` prefer the
+>   quote-free `--set NAME=VALUE` form, or pass a `.json` file to `--params`.
+> - Line continuation in PowerShell is a backtick `` ` `` (not `\`). The examples below are
+>   shown on one line so they paste cleanly.
+
 ## Workflow
 
-1. Visual sanity check (single param set, GUI + overlay plot):
+1. Visual sanity check (single param set, GUI + overlay plot).
+
+PowerShell (recommended, quote-free):
+
+```powershell
+.\isaaclab.bat -p .\scripts\tools\actuator_tuning\run_replay.py --set stiffness=28.1 --set damping=1.7 --set effort_limit=1.96 --set velocity_limit=11.1 --set saturation_effort=1.96 --set armature=0.01
+```
+
+Or pass a JSON file (create `params.json` with the dict, then):
+
+```powershell
+.\isaaclab.bat -p .\scripts\tools\actuator_tuning\run_replay.py --params .\params.json
+```
+
+bash / Linux:
 
 ```bash
 ./isaaclab.sh -p scripts/tools/actuator_tuning/run_replay.py \
-    --joint-name "<exact_usd_joint_name>" \
     --params '{"stiffness": 28.1, "damping": 1.7, "effort_limit": 1.96, "velocity_limit": 11.1, "saturation_effort": 1.96, "armature": 0.01}'
 ```
 
 2. Pass 1 - LHS/random search (friction locked at 0), headless, parallel:
 
-```bash
-./isaaclab.sh -p scripts/tools/actuator_tuning/run_sample_search.py --headless \
-    --joint-name "<exact_usd_joint_name>" --num-envs 64 \
-    --search-yaml scripts/tools/actuator_tuning/search_spec.example.yaml \
-    --output-dir logs/actuator_tuning/run01
+```powershell
+.\isaaclab.bat -p .\scripts\tools\actuator_tuning\run_sample_search.py --headless --num-envs 64 --search-yaml .\scripts\tools\actuator_tuning\search_spec.example.yaml --output-dir logs\actuator_tuning\run01
 ```
 
 Outputs: `sample_results.csv` (ranked), `best_grid.json`, `plots/rank_*.png`.
 
 3. Refine the top-k with local optimization (scipy Nelder-Mead):
 
-```bash
-./isaaclab.sh -p scripts/tools/actuator_tuning/run_refine.py --headless \
-    --joint-name "<exact_usd_joint_name>" \
-    --results logs/actuator_tuning/run01/sample_results.csv \
-    --search-yaml scripts/tools/actuator_tuning/search_spec.example.yaml \
-    --output-dir logs/actuator_tuning/run01 --top-k 5
+```powershell
+.\isaaclab.bat -p .\scripts\tools\actuator_tuning\run_refine.py --headless --results logs\actuator_tuning\run01\sample_results.csv --search-yaml .\scripts\tools\actuator_tuning\search_spec.example.yaml --output-dir logs\actuator_tuning\run01 --top-k 5
 ```
 
 Outputs: `best_refined.json`, refreshed `plots/rank_*.png`.
 
 4. (Optional) Pass 2 - unlock friction, only if reversals still mismatch:
 
-```bash
-./isaaclab.sh -p scripts/tools/actuator_tuning/run_friction_pass.py --headless \
-    --joint-name "<exact_usd_joint_name>" \
-    --seed-params logs/actuator_tuning/run01/best_refined.json \
-    --search-yaml scripts/tools/actuator_tuning/friction_spec.example.yaml \
-    --output-dir logs/actuator_tuning/run01_friction \
-    --reversal-mse-threshold 0.01
+```powershell
+.\isaaclab.bat -p .\scripts\tools\actuator_tuning\run_friction_pass.py --headless --seed-params logs\actuator_tuning\run01\best_refined.json --search-yaml .\scripts\tools\actuator_tuning\friction_spec.example.yaml --output-dir logs\actuator_tuning\run01_friction --reversal-mse-threshold 0.01
 ```
+
+(All scripts default `--joint-name base_link_to_Neck_revolute`; pass `--joint-name <name>` to change it.)
 
 Skips automatically if the seed's `reversal_pos_mse` is below the threshold (use `--force`
 to run regardless).
