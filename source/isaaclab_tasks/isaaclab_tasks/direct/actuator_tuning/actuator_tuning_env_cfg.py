@@ -85,7 +85,7 @@ class ActuatorTuningEnvCfg(DirectRLEnvCfg):
     segment_len_s: float = 10.0
     """Duration of each independent excitation segment in the recording (steps/sines/sawtooths)."""
 
-    lag_weight: float = 2.0
+    lag_weight: float = 1.0
     """Weight of the mean per-segment sim-vs-real lag (seconds) added to the score. 0 disables it."""
 
     lag_max_s: float = 0.3

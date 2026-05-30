@@ -40,7 +40,7 @@ SCORE_MODES = ("position_only", "position_heavy", "balanced")
 
 _TRACKING_WEIGHTS = {
     "position_only": (1.0, 0.0),
-    "position_heavy": (0.9, 0.1),
+    "position_heavy": (0.95, 0.05),
     "balanced": (0.7, 0.3),
 }
 
