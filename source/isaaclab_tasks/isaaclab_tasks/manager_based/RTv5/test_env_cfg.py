@@ -134,7 +134,11 @@ class RTv5TestEnvCfg(LocomotionVelocityRoughEnvCfg):
         # post init of parent
         super().__post_init__()
 
-        self.scene.robot = RT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot") # type: ignore
+        from .servo_actuator import apply_identified_servo
+
+        robot_cfg = RT_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")  # type: ignore
+        apply_identified_servo(robot_cfg)
+        self.scene.robot = robot_cfg
 
         # change terrain to flat
         self.scene.terrain.terrain_type = "plane"

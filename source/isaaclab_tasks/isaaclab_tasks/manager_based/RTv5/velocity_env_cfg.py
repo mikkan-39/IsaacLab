@@ -21,6 +21,7 @@ from isaaclab.utils.modifiers import DelayedObservationCfg
 
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 from isaaclab_tasks.manager_based.RTv5.delayed_backlash_action import DelayedBacklashJointPositionActionCfg
+from isaaclab_tasks.manager_based.RTv5.mlp_action import MlpJointPositionActionCfg
 import torch
 
 GAIT_FREQ_RANGE = (1.0, 1.5)  # Hz — per-env random frequency range
@@ -210,30 +211,20 @@ class ActionsCfg:
     #     clip={".*": (-2.0, 2.0)},
     # )
 
-    joint_integrated_pos = DelayedBacklashJointPositionActionCfg(
+    # Learned servo model: the policy commands an ABSOLUTE joint position target
+    # (target = default + scale * action), which is shaped by a trained servo MLP whose prediction is
+    # the position setpoint for the IdealPD actuator (configured in rough_env_cfg). The MLP captures
+    # the servo's (frequency-dependent) lag and learned backlash, so no separate transport-delay
+    # buffer or backlash dead-zone is applied here.
+    # NOTE: set `mlp_checkpoint` to your trained servo_mlp.pt (from train_servo_mlp.py).
+    joint_integrated_pos = MlpJointPositionActionCfg(
         asset_name="robot",
         joint_names=[controllableJointsRegex],
-        # `scale` is unused in delta mode; per-step magnitude is `delta_scale`.
         scale=1.0,
         use_default_offset=True,
         preserve_order=True,
-        # Tier-2 #4: delta-integrated targets instead of absolute targets.
-        # ~0.2 rad/step at 50 Hz caps slew rate at ~572 deg/s under unit action,
-        # matching what real ST3215-HS-class servos can track without saturating.
-        delta_scale=0.3,
-        # Tier-3 #11: stochastically perturb action history at reset so the
-        # policy learns to recover from non-default startup states (handed
-        # control from stand-up routine, hot restarts on hardware, etc.).
-        reset_history_jitter_std=0.00,
-        reset_history_jitter_prob=0.00,
-        min_delay_steps=0,
-        max_delay_steps=0,
-        backlash_deg=0.0,
-        # Tier-2 #5: enable servo position jitter. ~0.007 rad ≈ 0.4° matches
-        # bus-servo step quantization (~0.087°/count) plus mechanical jitter.
-        action_noise_std=0.000,
-        action_lpf_alpha=1.0,
-        clip={".*": (-1.0, 1.0)},
+        mlp_checkpoint="logs/actuator_tuning/mlp01/servo_mlp.pt",
+        clip={".*": (-2.0, 2.0)},
     )
 
 
@@ -662,6 +653,12 @@ class LocomotionVelocityRoughEnvCfg(ManagerBasedRLEnvCfg):
         # if it's >25 ms, switch to decimation=8 (25 Hz) or 10 (20 Hz) and retrain.
         self.decimation = 4
         self.episode_length_s = 15.0
+
+        # The MLP+IdealPD servo model uses the fixed identified PD gains, so disable runtime gain
+        # randomization (it would override the tuned stiffness/damping). Re-enable, re-centered on the
+        # identified gains, if you later want domain randomization around them.
+        self.events.robot_joint_stiffness_and_damping = None
+
         # simulation settings
         self.sim.dt = 1 / 200
         self.sim.render_interval = 4

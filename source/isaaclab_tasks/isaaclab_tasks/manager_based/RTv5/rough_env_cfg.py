@@ -4,6 +4,8 @@ from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 
+from .servo_actuator import apply_identified_servo
+
 import isaaclab_tasks.manager_based.locomotion.velocity.mdp as mdp
 import isaaclab_tasks.manager_based.classic.humanoid.mdp as mdp2
 
@@ -293,4 +295,7 @@ class RTv5RoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         # Already True in the asset; explicit here so future asset edits don't
         # silently disable self-collisions for the legs/arms during swing.
         robot_cfg.spawn.articulation_props.enabled_self_collisions = True
+
+        # Servo model = identified IdealPD; the MLP action term supplies the position setpoint.
+        apply_identified_servo(robot_cfg)
         self.scene.robot = robot_cfg
